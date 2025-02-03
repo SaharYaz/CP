@@ -248,14 +248,23 @@ public class StateSparseBitSet {
 
     /**
      * As for the {@link java.util.BitSet#get(int)}
-     * Gives the bit at the specified index
+     * Gives the bit at the specified index.
+     * <p>
+     * This method is not the most efficient to iterate on bitsets, and should only be used for debugging purposes.
+     * Use logical operations such as {@link StateSparseBitSet#and(BitSet)} in your own implementation.
      *
      * @param i the bit to return
      * @return true if bit at index i is set
      */
     public boolean get(int i) {
         int wordIndex = i >>> 6;
-        return wordIndex < nonZeroSize.value() && (this.words[wordIndex].value() & 1L << i) != 0L;
+        int nonZero = nonZeroSize.value();
+        for (int j = 0; j < nonZero; j++) {
+            if (wordIndex == nonZeroIdx[j]) {
+                return (this.words[wordIndex].value() & 1L << i) != 0L;
+            }
+        }
+        return false;
     }
 
     @Override

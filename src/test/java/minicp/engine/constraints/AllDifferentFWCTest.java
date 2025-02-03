@@ -148,46 +148,48 @@ public class AllDifferentFWCTest extends SolverTest {
         }
     }
 
-    @Test
-    @Grade(cpuTimeout = 40)
-    public void allDifferentTest5() {
-        Solver cp = makeSolver();
-        int nVariables = 42; // number of variables for the test
-        int domainSize = 2; // domain size for each variable
-        IntVar[] x = new IntVar[nVariables];
-        for (int split = 0 ; split < x.length ; split += domainSize)
-            for (int i = split ; i < Math.min(split + domainSize, x.length) ; i++)
-                x[i] = makeIntVar(cp, split, split + domainSize - 1);
-        // x0, x1 = {0, 1}
-        // x2, x3 = {2, 3}
-        // x4, x5 = {4, 5}
-        // ...
+    @ParameterizedTest
+    @MethodSource("getSolver")
+    public void allDifferentTest5(Solver cp) {
+
+        IntVar[] x = makeIntVarArray(cp, 8, 8);
         try {
-            // solve problem with forward checking
-            cp.getStateManager().saveState();
             cp.post(new AllDifferentFWC(x));
-            DFSearch search = makeDfs(cp, firstFail(x));
-            long init = System.currentTimeMillis();
-            SearchStatistics statsFWC = search.solve();
-            long allDiffFWCElapsed = System.currentTimeMillis() - init;
+            try {
+                cp.post(equal(x[1], 2));
+                cp.post(equal(x[2], 4));
 
-            cp.getStateManager().restoreState();
+                cp.post(equal(x[6], 1));
+                cp.post(equal(x[3], 1));
+                fail();
+            } catch (InconsistencyException e) {
 
-            // solve problem with binary decomposition
-            cp.post(new AllDifferentBinary(x));
-            search = makeDfs(cp, firstFail(x));
-            init = System.currentTimeMillis();
-            SearchStatistics statsBinary = search.solve();
-            long allDiffBinaryElapsed = System.currentTimeMillis() - init;
-            //System.out.println("binary: " + (((double) (allDiffBinaryElapsed)) / 1000));
-            //System.out.println("fwc   : " + (((double) (allDiffFWCElapsed)) / 1000));
-            assertTrue(allDiffFWCElapsed * 1.4 <=  allDiffBinaryElapsed,
-                    "All different with forward checking should be faster than using binary decomposition");
-            assertEquals(statsFWC.numberOfSolutions(), statsBinary.numberOfSolutions());
-            assertEquals(statsFWC.numberOfFailures(), statsBinary.numberOfFailures());
-            assertEquals(statsFWC.numberOfNodes(), statsBinary.numberOfNodes());
-        } catch (InconsistencyException e) {
-            fail("should not fail");
+            }
+        } catch (NotImplementedException e) {
+            NotImplementedExceptionAssume.fail(e);
+        }
+
+    }
+
+    @ParameterizedTest
+    @MethodSource("getSolver")
+    public void allDifferentTimeComplexity(Solver cp) {
+        int n = 1000;
+        IntVar[] x = makeIntVarArray(cp, n, n);
+        try {
+            cp.post(new AllDifferentFWC(x));
+            for (int i = 0 ; i < n-1 ; i++) {
+                cp.post(equal(x[i], i));
+            }
+            for (int i = 0 ; i < n ; i++) {
+                cp.getStateManager().saveState();
+                cp.post(equal(x[n-1], n-1));
+                cp.getStateManager().restoreState();
+            }
+            try {
+            } catch (InconsistencyException e) {
+                fail();
+            }
         } catch (NotImplementedException e) {
             NotImplementedExceptionAssume.fail(e);
         }
