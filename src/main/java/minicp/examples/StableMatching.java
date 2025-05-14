@@ -86,15 +86,36 @@ public class StableMatching extends SatisfactionProblem {
             // TODO: model this with Element1DVar: the student of the company of student s is s
             
             // TODO: model this with Element1D: rankCompanies[s][company[s]] = companyPref[s]
-            
 
+            // student[ company[s] ] = s
+            cp.post(new Element1DVar(
+                    student,
+                    company[s],
+                    makeIntVar(cp, s, s)));
+
+            // companyPref[s] = rankCompanies[s][ company[s] ]
+            cp.post(new Element1D(
+                    rankCompanies[s],
+                    company[s],
+                    companyPref[s]));
         }
 
         for (int c = 0; c < n; c++) {
             // TODO: model this with Element1DVar: the company of the student of company c is c
             
             // TODO: model this with Element1D: rankStudents[c][student[c]] = studentPref[c]
-            
+
+            // company[ student[c] ] = c
+            cp.post(new Element1DVar(
+                    company,
+                    student[c],
+                    makeIntVar(cp, c, c)));
+
+            // studentPref[c] = rankStudents[c][ student[c] ]
+            cp.post(new Element1D(
+                    rankStudents[c],
+                    student[c],
+                    studentPref[c]));
         }
 
         for (int s = 0; s < n; s++) {
@@ -109,14 +130,16 @@ public class StableMatching extends SatisfactionProblem {
                 // if company c prefers student s over their chosen student, then the opposite is not true: s prefers the chosen company over c
                 // (studentPref[c] > rankStudents[c][s]) => (companyPref[s] < rankCompanies[s][c])
                 // TODO: model this constraint
-                
+
+                BoolVar cPrefersS = isLarger(studentPref[c], rankStudents[c][s]);
+                BoolVar sOk       = isLess   (companyPref[s], rankCompanies[s][c]);
+                cp.post(implies(cPrefersS, sOk));
 
             }
         }
 
         dfs = makeDfs(cp, and(firstFail(company), firstFail(student)));
         // TODO add the constraints to the model and remove the NotImplementedException
-         throw new NotImplementedException("StableMatching");
     }
 
     public SearchStatistics solve(boolean verbose, Predicate<SearchStatistics> limit) {

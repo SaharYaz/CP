@@ -73,11 +73,40 @@ public class Element1D extends AbstractConstraint {
 
     @Override
     public void post() {
-         throw new NotImplementedException("Element1D");
+        propagate();
+
+        // re-propagate
+        y.propagateOnDomainChange(this);
+        z.propagateOnDomainChange(this);   // z loses an interior value
+        z.propagateOnBoundChange(this);    // z.min()/max() tighten
     }
 
     @Override
     public void propagate() {
-         throw new NotImplementedException("Element1D");
+        // 1. prune indices that are out of range or unsupported
+        int[] domY = new int[y.size()];
+        int m = y.fillArray(domY);
+
+        int newMin = Integer.MAX_VALUE;
+        int newMax = Integer.MIN_VALUE;
+
+        for (int k = 0; k < m; k++) {
+            int idx = domY[k];
+            // remove impossible indices
+            if (idx < 0 || idx >= t.length || !z.contains(t[idx])) {
+                y.remove(idx);
+                continue;
+            }
+            // still feasible -> contribute to bounds for z
+            int v = t[idx];
+            if (v < newMin) newMin = v;
+            if (v > newMax) newMax = v;
+        }
+
+        // 2. tighten bounds of z
+        if (newMin == Integer.MAX_VALUE)
+            throw new InconsistencyException();
+        z.removeBelow(newMin);
+        z.removeAbove(newMax);
     }
 }

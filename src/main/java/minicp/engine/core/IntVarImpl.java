@@ -100,7 +100,30 @@ public class IntVarImpl implements IntVar {
      * @param values the initial values in the domain, it must be nonempty
      */
     public IntVarImpl(Solver cp, Set<Integer> values) {
-         throw new NotImplementedException();
+        if (values == null || values.isEmpty())
+            throw new InvalidParameterException("domain cannot be empty");
+
+        // Compute range bounds
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        for (int v : values) {
+            if (v == Integer.MIN_VALUE || v == Integer.MAX_VALUE)
+                throw new InvalidParameterException("Integer.MIN_VALUE / MAX_VALUE not allowed");
+            min = Math.min(min, v);
+            max = Math.max(max, v);
+        }
+
+        // Initialise with *dense* domain [min,max]
+        this.cp = cp;
+        domain   = new SparseSetDomain(cp.getStateManager(), min, max);
+        onDomain = new StateStack<>(cp.getStateManager());
+        onFix    = new StateStack<>(cp.getStateManager());
+        onBound  = new StateStack<>(cp.getStateManager());
+
+        // keep only the requested values
+        for (int v = min; v <= max; v++)
+            if (!values.contains(v))
+                domain.remove(v, domListener);
     }
 
     @Override
@@ -177,7 +200,7 @@ public class IntVarImpl implements IntVar {
 
     @Override
     public int fillArray(int[] dest) {
-         throw new NotImplementedException();
+        return domain.fillArray(dest);
     }
 
     @Override

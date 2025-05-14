@@ -43,7 +43,7 @@ public class TableCT extends AbstractConstraint {
 
     private StateInt[] lastDomSize; // store the last size of the domain of the variable
     private int[] dom; // domain iterator
-
+    private final int[] origMin;
     /**
      * Table constraint.
      * <p>The table constraint ensures that
@@ -68,11 +68,15 @@ public class TableCT extends AbstractConstraint {
 
         supportedTuples = new StateSparseBitSet(this.getSolver().getStateManager(), table.length);
 
+        origMin = new int[x.length];
+
         // Allocate supports
         supports = new StateSparseBitSet.SupportBitSet[x.length][];
         lastDomSize = new StateInt[x.length];
         for (int i = 0; i < x.length; i++) {
-            this.x[i] = minus(x[i], x[i].min()); // map the variables domain to start at 0
+//            this.x[i] = minus(x[i], x[i].min()); // map the variables domain to start at 000
+            origMin[i] = x[i].min();
+            this.x[i] = minus(x[i], origMin[i]);  // shift domain to 0
             supports[i] = new StateSparseBitSet.SupportBitSet[x[i].max() - x[i].min() + 1];
             for (int v = 0; v < supports[i].length; v++) {
                 supports[i][v] = supportedTuples.new SupportBitSet();
@@ -86,7 +90,9 @@ public class TableCT extends AbstractConstraint {
                 // TODO 1: fill the support bitset
                 //  supports[i][v] is the set of tuples supported by x[i]=v
                 //  hint: use supports[i][v].set(...)
-                 throw new NotImplementedException("TableCT");
+                int offset = table[t][i] - origMin[i];
+                if (offset >= 0 && offset < supports[i].length)
+                    supports[i][offset].set(t);
             }
         }
 
@@ -110,7 +116,7 @@ public class TableCT extends AbstractConstraint {
      */
     public boolean hasChanged(int i) {
         // TODO 2: use lastDomSize[i] to verify if the domain size of x[i] has changed since last propagation
-         throw new NotImplementedException("TableCT");
+        return x[i].size() != lastDomSize[i].value();
     }
 
     @Override
@@ -120,6 +126,12 @@ public class TableCT extends AbstractConstraint {
                 // TODO 3: update supportedTuples as
                 // supportedTuples &= (supports[i][x[i].min()] | ... | supports[i][x[i].max()] )
                 // for all x[i] modified since last call node in the search tree (see TODO 2 )
+                tmpSupport.clear();                         // tmp = 0
+                int nVal = x[i].fillArray(dom);             // enumerate current domain
+                for (int k = 0; k < nVal; k++) {
+                    tmpSupport.or(supports[i][dom[k]]);     // union of supports
+                }
+                supportedTuples.and(tmpSupport);            // intersect with live tuples
             }
         }
 
@@ -129,10 +141,11 @@ public class TableCT extends AbstractConstraint {
             for (int v = 0; v < nVal; v++) {
                     // TODO 4 the condition for removing the setValue dom[v] from x[i] is to check if
                     //  there is no intersection between supportedTuples and the support[i][dom[v]]
-
+                if (!supportedTuples.intersects(supports[i][dom[v]])) {
+                    x[i].remove(dom[v]);                    // value has no more support
+                }
             }
             lastDomSize[i].setValue(x[i].size()); // store the current domain size to compare during next propagation
         }
-         throw new NotImplementedException("TableCT");
     }
 }

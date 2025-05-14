@@ -216,7 +216,11 @@ public class StateSparseBitSet {
      */
     protected boolean intersectsResidueOnly(SupportBitSet bs) {
         // TODO 1: use the residue to test if the non-empty intersection stored is still non-empty
-         throw new NotImplementedException("StateSparseBitSet");
+        int idx = bs.residue;
+        // idx is a legal array slot
+        return idx >= 0
+                && idx < nWords
+                && (words[idx].value() & bs.words[idx]) != 0L;
     }
 
     /**
@@ -239,7 +243,7 @@ public class StateSparseBitSet {
             State<Long> w = words[idx];
             if ((w.value() & bs.words[idx]) != 0L) {
                 // TODO 2: store the new non-empty intersection using residue of bs
-                
+                bs.residue = idx;
                 return true;
             }
         }

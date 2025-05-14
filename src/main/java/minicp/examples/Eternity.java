@@ -95,7 +95,28 @@ public class Eternity extends SatisfactionProblem {
         // Table with makeIntVarArray pieces and for each their 4 possible rotations
 
         table = new int[4 * n * m][5];
-        
+        int row = 0;
+        for (int pid = 0; pid < pieces.length; pid++) {
+            int up    = pieces[pid][0];
+            int right = pieces[pid][1];
+            int down  = pieces[pid][2];
+            int left  = pieces[pid][3];
+
+            for (int rot = 0; rot < 4; rot++) {  // 0,90,180,270
+                table[row][0] = pid;
+                table[row][1] = up;
+                table[row][2] = right;
+                table[row][3] = down;
+                table[row][4] = left;
+                row++;
+                // 90 clockwise
+                int tmp = up;
+                up    = right;
+                right = down;
+                down  = left;
+                left  = tmp;
+            }
+        }
 
         Solver cp = makeSolver();
 
@@ -153,17 +174,31 @@ public class Eternity extends SatisfactionProblem {
 
         // Constraint3: place "0" one all external side of the border (gray color)
 
-        
+        // 1. every square shows a valid line from the table
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < m; j++)
+                cp.post(new TableCT(new IntVar[]{
+                        id[i][j], u[i][j], r[i][j], d[i][j], l[i][j]}, table));
+
+        // 2.all piece identifiers must be different
+        cp.post(allDifferent(flatten(id)));
+
+        //3. grey (0) on the border
+        for (int j = 0; j < m; j++) { u[0][j].fix(0); d[n - 1][j].fix(0); }
+        for (int i = 0; i < n; i++) { l[i][0].fix(0); r[i][m - 1].fix(0); }
 
 
         // The search using the and combinator
 
         dfs = makeDfs(cp,
                 /* TODO 3: continue, are you branching on all the variables ? */
-                 and(firstFail(flatten((id))), firstFail(flatten(u)))
+                 and(firstFail(flatten((id))), firstFail(flatten(u)),
+                         firstFail(flatten(r)),
+                         firstFail(flatten(d)),
+                         firstFail(flatten(l))
+                         )
         );
         // TODO add the constraints and remove the NotImplementedException
-         throw new NotImplementedException("Eternity");
     }
 
     /**

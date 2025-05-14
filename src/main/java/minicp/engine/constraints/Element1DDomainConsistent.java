@@ -34,6 +34,12 @@ public class Element1DDomainConsistent extends AbstractConstraint {
     private final IntVar y;
     private final IntVar z;
 
+    private int[] bufY  = new int[0];
+    private int[] bufZ  = new int[0];
+
+    private static int[] ensureCapacity(int[] a, int needed) {
+        return (a.length >= needed) ? a : new int[needed];
+    }
     /**
      * Creates an element constraint {@code array[y] = z}
      *
@@ -50,6 +56,34 @@ public class Element1DDomainConsistent extends AbstractConstraint {
 
     @Override
     public void post() {
-         throw new NotImplementedException("Element1D");
+        propagate();
+        y.propagateOnDomainChange(this);
+        z.propagateOnDomainChange(this);
+    }
+
+    @Override
+    public void propagate() {
+        bufY = ensureCapacity(bufY, y.size());
+        bufZ = ensureCapacity(bufZ, z.size());
+
+        // 1. prune y
+        int ySize = y.fillArray(bufY);
+        for (int i = 0; i < ySize; i++) {
+            int idx = bufY[i];
+            if (idx < 0 || idx >= t.length || !z.contains(t[idx])) {
+                y.remove(idx);
+            }
+        }
+
+        // 2. prune z
+        int zSize = z.fillArray(bufZ);
+        for (int j = 0; j < zSize; j++) {
+            int v = bufZ[j];
+            boolean supported = false;
+            int ySz = y.fillArray(bufY);   // fresh snapshot
+            for (int k = 0; k < ySz && !supported; k++)
+                supported = (t[bufY[k]] == v);
+            if (!supported) z.remove(v);
+        }
     }
 }

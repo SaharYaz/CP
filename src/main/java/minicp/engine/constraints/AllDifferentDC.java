@@ -112,7 +112,37 @@ public class AllDifferentDC extends AbstractConstraint {
             out[j].clear();
         }
         // TODO continue the implementation for representing the residual graph
-         throw new NotImplementedException("AllDifferentDC");
+
+        for (int var = 0; var < nVar; var++) {
+            int matchedVal = match[var];  // −1 if none
+
+            // iterate over the current domain of x
+            for (int a = x[var].min(); a <= x[var].max(); a++) {
+                if (!x[var].contains(a)) continue;
+
+                int valNode = nVar + (a - minVal);
+
+                if (a == matchedVal) {    // matched edge
+                    in[var].add(valNode);
+                    out[valNode].add(var);
+                } else {                  // unmatched edge
+                    out[var].add(valNode);
+                    in[valNode].add(var);
+                }
+            }
+        }
+
+        // sink arcs
+        for (int off = 0; off < nVal; off++) {
+            int valNode = nVar + off;
+            if (matched[off]) {           // matched value
+                out[sink].add(valNode);
+                in[valNode].add(sink);
+            } else {                      // free value
+                out[valNode].add(sink);
+                in[sink].add(valNode);
+            }
+        }
     }
 
 
@@ -123,6 +153,36 @@ public class AllDifferentDC extends AbstractConstraint {
         //       use updateRange() to update the range of values
         //       use updateGraph() to update the residual graph
         //       use  GraphUtil.stronglyConnectedComponents to compute SCC's
-         throw new NotImplementedException("AllDifferentDC");
+
+        // 1. refresh
+        updateRange();
+
+        // 2. compute a maximum matching
+        Arrays.fill(match, -1);
+        maximumMatching.compute(match);    // fills the array 'match'
+
+        // 3. mark which values are matched
+        matched = new boolean[nVal];
+        for (int v : match)
+            if (v >= 0) matched[v - minVal] = true;
+
+        // 4. build the residual graph
+        updateGraph();
+
+        //5. compute strongly-connected components
+        int[] scc = GraphUtil.stronglyConnectedComponents(g);
+
+        //6. prune
+        for (int var = 0; var < nVar; var++) {
+            for (int a = x[var].min(); a <= x[var].max(); a++) {
+                if (!x[var].contains(a)) continue;
+                if (a == match[var]) continue;     // keep matched value
+
+                int valNode = nVar + (a - minVal);
+                if (scc[var] != scc[valNode]) {
+                    x[var].remove(a);            // unsupported value
+                }
+            }
+        }
     }
 }

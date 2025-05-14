@@ -120,8 +120,28 @@ public class GraphColoringTinyCSP {
         // TODO: solve the graph coloring problem using TinyCSP and return a solution
         // Hint: you can stop the search on first solution throwing and catching an exception
         //       in the onSolution closure or you can modify the dfs search
-         throw new NotImplementedException("GraphColoringTinyCSP");
+
+        // 1. Build the CSP model
+        TinyCSP csp = new TinyCSP();
+
+        // one variable per node: its value is the colour 0..maxColor-1
+        Variable[] color = new Variable[instance.n];
+        for (int i = 0; i < instance.n; i++) {
+            color[i] = csp.makeVariable(instance.maxColor);
+        }
+
+        // add "adjacnt nodes ≠ same colour" constraints
+        for (int[] e : instance.edges) { // each edge is {u,v}
+            int u = e[0], v = e[1];
+            csp.notEqual(color[u], color[v], 0);
+        }
+
+        // 2.Run DFS once.
+        final int[][] first = { null };
+        csp.dfs(sol -> {
+            if (first[0] == null) first[0] = sol;  // store & ignore later ones
+        });
+
+        return first[0];   // colouring, or null if UNSAT
     }
-
-
 }
