@@ -19,6 +19,8 @@ import minicp.engine.core.AbstractConstraint;
 import minicp.engine.core.BoolVar;
 import minicp.state.StateInt;
 import minicp.util.exception.NotImplementedException;
+import static minicp.util.exception.InconsistencyException.INCONSISTENCY;
+
 /**
  * Reified logical or constraint
  */
@@ -32,6 +34,7 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
     private StateInt nFreeVars;
 
     private final Or or;
+    private boolean orPosted = false;
 
     /**
      * Creates a constraint such that
@@ -61,11 +64,54 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
         for (BoolVar xi : x) {
             xi.propagateOnFix(this);
         }
+        propagate();
+    }
+
+    private void postOrIfNeeded() {
+        if (!orPosted) {
+            getSolver().post(or);
+            orPosted = true;
+        }
     }
 
     @Override
     public void propagate() {
         // TODO Implement the constraint as efficiently as possible and make sure you pass all the tests
-         throw new NotImplementedException();
+
+        if (b.isTrue()) {           // b = 1
+            postOrIfNeeded();
+            return;
+        }
+
+        if (b.isFalse()) {          // b = 0
+            for (BoolVar xi : x) {
+                if (xi.isTrue())            // contradiction
+                    throw INCONSISTENCY;
+                if (!xi.isFixed())
+                    xi.fix(false);
+            }
+            return;
+        }
+
+        boolean someTrue  = false;          // at least one xi == 1
+        boolean someFree  = false;          // at least one xi still undecided
+
+        for (BoolVar xi : x) {
+            if (xi.isTrue()) {
+                someTrue = true;
+                break;
+            }
+            if (!xi.isFixed())
+                someFree = true;
+        }
+
+        if (someTrue) {              // clause satisfied
+            b.fix(true);
+            postOrIfNeeded();
+        }
+        else if (!someFree) {        // all xi are 0
+            b.fix(false);
+        }
+
     }
 }

@@ -106,19 +106,25 @@ public class RCPSP extends OptimizationProblem {
         // capa[r] is the capacity of resource r
         // consumption[r] is the consumption for each activity on the resource [r]
         // duration is the duration of each activity
+        for (int r = 0; r < nResources; r++) {
+            cp.post(new Cumulative(start, duration, consumption[r], capa[r]));
+        }
 
         // TODO 2: add the precedence constraints
-        // successors[i] is the sucessors of activity i
+        for (int i = 0; i < nActivities; i++) {
+            for (int succ : successors[i]) {
+                cp.post(lessOrEqual(end[i], start[succ]));
+            }
+        }
 
         // TODO 3: minimize the makespan
-         IntVar makespan = null;
-         objective = null;
+        IntVar makespan = maximum(end);
+        objective = cp.minimize(makespan);
 
         // TODO 4: implement the search
+        dfs = makeDfs(cp, firstFail(start));
 
-         dfs = null;
         // TODO add the constraints, the search and remove the NotImplementedException
-         throw new NotImplementedException("RCPSP");
     }
 
     @Override

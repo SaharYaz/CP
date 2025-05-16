@@ -20,6 +20,7 @@ import minicp.cp.Factory;
 import minicp.engine.core.AbstractConstraint;
 import minicp.engine.core.BoolVar;
 import minicp.engine.core.IntVar;
+import minicp.engine.core.Solver;
 import minicp.util.exception.NotImplementedException;
 
 import java.util.Arrays;
@@ -73,7 +74,22 @@ public class CumulativeDecomposition extends AbstractConstraint {
                 // hint: use IsLessOrEqual, introduce BoolVar, use views minus, plus, etc.
                 //       logical constraints (such as logical and can be modeled with sum)
 
-                 throw new NotImplementedException("CumulativeDecomp");
+                Solver cp = getSolver();
+
+                // b1 (start[i] ≤ t)
+                BoolVar b1 = isLessOrEqual(start[i], t);
+
+                // b2 (t < start[i] + duration[i]), t ≤ end[i] − 1
+                IntVar  constT     = makeIntVar(cp, t, t);
+                IntVar  endMinus1  = minus(end[i], 1);
+                BoolVar b2         = makeBoolVar(cp);
+                cp.post(new IsLessOrEqualVar(b2, constT, endMinus1));
+
+                // overlaps[i] = b1 ∧ b2
+                cp.post(lessOrEqual(overlaps[i], b1));   // overlaps  b1
+                cp.post(lessOrEqual(overlaps[i], b2));   // overlaps  b2
+                IntVar sum12 = sum(b1, b2);              // b1 + b2
+                cp.post(lessOrEqual(sum12, plus(overlaps[i], 1)));  // if b1 & b2 then overlaps = 1
             }
 
             IntVar[] overlapHeights = Factory.makeIntVarArray(start.length, i -> mul(overlaps[i], demand[i]));
@@ -83,5 +99,4 @@ public class CumulativeDecomposition extends AbstractConstraint {
         }
 
     }
-
 }

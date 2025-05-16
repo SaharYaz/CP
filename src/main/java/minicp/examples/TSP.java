@@ -71,13 +71,30 @@ public class TSP extends OptimizationProblem {
                 return EMPTY;
             else {
                 // TODO modify the value selector to get a better solution
-                int v = xs.min();
+                int idx = -1;
+                for (int k = 0; k < n; k++)
+                    if (succ[k] == xs) { idx = k; break; }
+
+                int bestV    = -1;
+                int bestDist = Integer.MAX_VALUE;
+
+                for (int v = xs.min(); v <= xs.max(); v++) {
+                    if (!xs.contains(v))            // skip values not in the domain
+                        continue;
+
+                    int d = distanceMatrix[idx][v];
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestV    = v;
+                    }
+                }
+                int v = bestV;
+                // int v = xs.min();
                 return branch(() -> xs.getSolver().post(equal(xs, v)),
                         () -> xs.getSolver().post(notEqual(xs, v)));
             }
         });
         // TODO implement the search and remove the NotImplementedException
-         throw new NotImplementedException("TSP");
     }
 
     /**
@@ -106,7 +123,7 @@ public class TSP extends OptimizationProblem {
         //  But setting 95% will not help much as there are not a lot of things decide: almost everything is fixed!
         //  Try to find the sweet spot for this problem
          int failureLimit = 1000;
-         int percentage = 5;
+         int percentage = 80;
         Random rand = new java.util.Random(42);
         Solver cp = totalDist.getSolver();
 

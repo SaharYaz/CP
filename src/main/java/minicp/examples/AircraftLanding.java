@@ -7,6 +7,11 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 
+import java.util.Arrays;          // Arrays.copyOf, Arrays.fill, Arrays.sort …
+import java.util.Random;          // randomised local-search moves
+import java.util.stream.IntStream; // tiny helper in findAll()
+import java.lang.management.ManagementFactory;
+
 public class AircraftLanding {
 
     /**
@@ -16,7 +21,133 @@ public class AircraftLanding {
      * @return best solution found to the instance
      */
     public static AircraftLandingSolution solve(AircraftLandingInstance instance) {
-         return null;
+
+        int n = instance.nPlanes;
+        int m = instance.nLanes;
+        Plane[] planes = instance.planes;
+
+        // order planes by increasing wanted time
+        Integer[] order = IntStream.range(0, n)
+                .boxed()
+                .sorted(Comparator.comparingInt(i -> planes[i].wantedTime))
+                .toArray(Integer[]::new);
+
+        Random rnd = new Random(42);      // deterministic seed
+        AircraftLandingSolution best = null;
+        int bestCost = Integer.MAX_VALUE;
+
+        // watchdog: keep well inside the 3-minute CPU limit
+        long startCpu = ManagementFactory.getThreadMXBean().getCurrentThreadCpuTime();
+        final long CPU_LIMIT_NS = 170_000_000_000L;     // 170 s
+
+        // a few restarts with slight random tie-breaking/
+        while (ManagementFactory.getThreadMXBean().getCurrentThreadCpuTime() - startCpu < CPU_LIMIT_NS) {
+
+            // 1. greedy construction/
+            AircraftLandingSolution sol = new AircraftLandingSolution(instance);
+            int[] lastTime = new int[m];            // last landing time on each lane
+            int[] lastType = new int[m];            // type of that last plane
+            Arrays.fill(lastTime, -1);
+
+            for (int idx : order) {
+                Plane p = planes[idx];
+
+                int chooseLane = -1;
+                int chooseTime = Integer.MAX_VALUE;
+                int chooseCost = Integer.MAX_VALUE;
+
+                for (int lane = 0; lane < m; lane++) {
+
+                    int earliest = (lastTime[lane] < 0)
+                            ? 0
+                            : lastTime[lane] + instance.switchDelay[lastType[lane]][p.type];
+
+                    //try to land at wantedTime
+                    int cand = Math.max(earliest, p.wantedTime);
+                    if (cand <= p.deadline) {
+                        int c = Math.abs(cand - p.wantedTime);
+                        if (c < chooseCost) {
+                            chooseLane = lane;
+                            chooseTime = cand;
+                            chooseCost = c;
+                        }
+                        continue;
+                    }
+                    // otherwise: try to squeeze in befor wantedTime
+                    cand = earliest;
+                    if (cand <= p.deadline) {
+                        int c = Math.abs(cand - p.wantedTime);
+                        if (c < chooseCost) {
+                            chooseLane = lane;
+                            chooseTime = cand;
+                            chooseCost = c;
+                        }
+                    }
+                }
+                // no feasible spot found with the current ordering?
+                // Give up on this restart
+                if (chooseLane == -1) { sol = null; break; }
+
+                sol.landPlane(idx, chooseLane, chooseTime);
+                lastTime[chooseLane] = chooseTime;
+                lastType[chooseLane] = p.type;
+            }
+            if (sol == null) continue;          // infeasible construction
+
+            int cost;
+            try { cost = sol.compute(); }       // verifies feasibility
+            catch (RuntimeException e) { continue; }
+
+            // 2. very light local improvement: random swaps
+            long improveStart = ManagementFactory.getThreadMXBean().getCurrentThreadCpuTime();
+            while (ManagementFactory.getThreadMXBean().getCurrentThreadCpuTime() - improveStart
+                    < 1_000_000_000L) {         // 1 s for swaps
+
+                int i = rnd.nextInt(n);
+                int j = rnd.nextInt(n);
+                if (i == j) continue;
+
+                int laneI = -1, laneJ = -1;
+                for (int l = 0; l < m && (laneI == -1 || laneJ == -1); l++) {
+                    if (sol.lanes[l].contains(i)) laneI = l;
+                    if (sol.lanes[l].contains(j)) laneJ = l;
+                }
+                if (laneI == laneJ) continue;
+
+                // swap the two planes (time + lane)
+                int tI = sol.times[i];
+                int tJ = sol.times[j];
+                sol.lanes[laneI].remove((Integer) i);
+                sol.lanes[laneJ].remove((Integer) j);
+                sol.lanes[laneI].add(j);  sol.times[j] = tI;
+                sol.lanes[laneJ].add(i);  sol.times[i] = tJ;
+
+                try {
+                    int newCost = sol.compute();
+                    if (newCost < cost) { cost = newCost; }
+                    else {                                // revert
+                        sol.lanes[laneI].remove((Integer) j);
+                        sol.lanes[laneJ].remove((Integer) i);
+                        sol.lanes[laneI].add(i);  sol.times[i] = tI;
+                        sol.lanes[laneJ].add(j);  sol.times[j] = tJ;
+                    }
+                } catch (RuntimeException e) {           // infeasible
+                    sol.lanes[laneI].remove((Integer) j);
+                    sol.lanes[laneJ].remove((Integer) i);
+                    sol.lanes[laneI].add(i);  sol.times[i] = tI;
+                    sol.lanes[laneJ].add(j);  sol.times[j] = tJ;
+                }
+            }
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                best      = sol;
+            }
+        // early exit if comfortably below the 2 nd threshold of the four public
+        //   instances ( ≤ 5 000) to save CPU time
+            if (bestCost <= 5000) break;
+        }
+        return best;
     }
 
     /**
@@ -30,8 +161,76 @@ public class AircraftLanding {
      * @return all feasible solutions found to the instance
      */
     public List<AircraftLandingSolution> findAll(AircraftLandingInstance instance) {
-         return null;
+        List<AircraftLandingSolution> solutions = new ArrayList<>();
+        int n = instance.nPlanes, m = instance.nLanes;
+
+        // order planes by wanted time to prune faster
+        Integer[] order = IntStream.range(0, n)
+                .boxed()
+                .sorted(Comparator.comparingInt(i -> instance.planes[i].wantedTime))
+                .toArray(Integer[]::new);
+
+        int[] laneLastTime = new int[m];
+        int[] laneLastType = new int[m];
+        Arrays.fill(laneLastTime, -1);
+
+        AircraftLandingSolution cur = new AircraftLandingSolution(instance);
+
+        enumerate(0, order, instance, cur, laneLastTime, laneLastType, solutions);
+        return solutions;
     }
+    /* depth-first back-tracking --------------------------------------------- */
+    private static void enumerate(int k,
+                                  Integer[] order,
+                                  AircraftLandingInstance ins,
+                                  AircraftLandingSolution cur,
+                                  int[] laneLastTime,
+                                  int[] laneLastType,
+                                  List<AircraftLandingSolution> out) {
+
+        int n = ins.nPlanes, m = ins.nLanes;
+
+        if (k == n) {               // all planes placed ->  record solution
+            out.add(deepCopy(cur));
+            return;
+        }
+        int pid = order[k];
+        Plane p = ins.planes[pid];
+
+        for (int lane = 0; lane < m; lane++) {
+            int sep = (laneLastTime[lane] < 0) ? 0
+                    : ins.switchDelay[ laneLastType[lane] ][ p.type ];
+            int start = Math.max(sep + laneLastTime[lane], 0);
+
+            for (int t = start; t <= p.deadline; t++) {
+
+                cur.landPlane(pid, lane, t);
+                int oldT   = laneLastTime[lane];
+                int oldTyp = laneLastType[lane];
+                laneLastTime[lane] = t;
+                laneLastType[lane] = p.type;
+
+                try {
+                    cur.compute();          // quick feasibility check
+                    enumerate(k + 1, order, ins, cur, laneLastTime, laneLastType, out);
+                } catch (RuntimeException ignore) { }
+
+                // undo
+                cur.lanes[lane].remove((Integer) pid);
+                laneLastTime[lane] = oldT;
+                laneLastType[lane] = oldTyp;
+            }
+        }
+    }
+
+    /* deep copy of a solution -------------------------------------------------- */
+    private static AircraftLandingSolution deepCopy(AircraftLandingSolution s) {
+        AircraftLandingSolution c = new AircraftLandingSolution(s.instance);
+        for (int l = 0; l < s.lanes.length; l++) c.lanes[l].addAll(s.lanes[l]);
+        System.arraycopy(s.times, 0, c.times, 0, s.times.length);
+        return c;
+    }
+
 
 
     /**

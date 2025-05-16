@@ -37,21 +37,29 @@ public class VRP extends OptimizationProblem{
         // TODO 1: there are now nVehicle in the problem. The depot is the city at index 0
         //  and every other city must be visited exactly once by exactly one of the vehicles
         //  put in n the correct number of nodes within the problem
-         n = initalNodes;
+        // n = initalNodes;
+        n = initalNodes + nVehicle - 1;
 
         distanceMatrix = new int[n][n];
         for (int i = 0 ; i < distanceMatrix.length ; ++i) {
+            int origI = toOrig(i);
             for (int j = 0 ; j < distanceMatrix.length; ++j) {
                 // TODO 2: extend the distance matrix to put the correct distances
                 //  from initialDistanceMatrix
                 //  the nodes 0..nVehicle correspond to the depot nodes
                 //  the other nodes are the city that must be visited
-                 distanceMatrix[i][j] = initialDistanceMatrix[i][j];
+                int origJ = toOrig(j);
+                distanceMatrix[i][j] = initialDistanceMatrix[origI][origJ];
             }
         }
 
         Solver cp = makeSolver();
         succ = makeIntVarArray(cp, n, n);
+        for (int d1 = 0; d1 < nVehicle; d1++) {
+            for (int d2 = 0; d2 < nVehicle; d2++) {
+                if (d1 != d2) succ[d1].remove(d2);   // depots cannot follow one another
+            }
+        }
         IntVar[] distSucc = makeIntVarArray(cp, n, 1000);
         cp.post(new Circuit(succ));
         for (int i = 0; i < n; i++) {
@@ -73,6 +81,10 @@ public class VRP extends OptimizationProblem{
                         () -> xs.getSolver().post(notEqual(xs, v)));
             }
         });
+    }
+
+    int toOrig(int idx) {
+        return (idx < nVehicle) ? 0 : idx - (nVehicle - 1);
     }
 
     @Override

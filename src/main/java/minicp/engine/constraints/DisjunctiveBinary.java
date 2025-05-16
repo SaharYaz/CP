@@ -20,6 +20,7 @@ import minicp.engine.core.AbstractConstraint;
 import minicp.engine.core.BoolVar;
 import minicp.engine.core.IntVar;
 import minicp.util.exception.NotImplementedException;
+import minicp.engine.core.Solver;
 
 import static minicp.cp.Factory.*;
 
@@ -56,7 +57,13 @@ public class DisjunctiveBinary extends AbstractConstraint implements Comparable<
     public void post() {
         // TODO : post binary decomposition using IsLessOrEqualVar (reified constraints)
         // one of the two activities must precede the other one
-         throw new NotImplementedException("DisjunctiveBinary");
+        Solver cp = getSolver();
+
+        // A << B
+        cp.post(new IsLessOrEqualVar(before, end1, start2));
+
+        // B << A
+        cp.post(new IsLessOrEqualVar(after,  end2, start1));
     }
 
     /**

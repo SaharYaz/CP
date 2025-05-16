@@ -21,6 +21,7 @@ import minicp.engine.core.IntVar;
 import minicp.state.StateInt;
 import minicp.util.exception.NotImplementedException;
 import static minicp.cp.Factory.allDifferent;
+import minicp.util.Procedure;
 
 /**
  * Hamiltonian Circuit Constraint with a successor model
@@ -58,12 +59,34 @@ public class Circuit extends AbstractConstraint {
         getSolver().post(allDifferent(x));
         // TODO
         // Hint: use x[i].whenFixed(...) to call the fix
-         throw new NotImplementedException("Circuit");
+
+        // forbid self-successor and process already-fixed vars
+        for (int i = 0; i < x.length; i++) {
+            x[i].remove(i);
+            final int idx = i;   // for lambda capture
+            x[idx].whenFixed(() -> fix(idx));
+            if (x[idx].isFixed())      // already fixed at post time
+                fix(idx);
+        }
     }
 
 
     protected void fix(int i) {
         // TODO
-         throw new NotImplementedException("Circuit");
+        int n = x.length;
+        int j        = x[i].min();
+        int o        = orig[i].value();
+        int d        = dest[j].value();
+
+        // join both paths
+        dest[o].setValue(d);
+        orig[d].setValue(o);
+        int newLen = lengthToDest[o].value() + lengthToDest[j].value() + 1;
+        lengthToDest[o].setValue(newLen);
+
+        // forbid early closure if circuit length < n-1
+        if (newLen < n - 1) {
+            x[d].remove(o);    // cannot close a short subtour
+        }
     }
 }

@@ -85,13 +85,15 @@ public class Cumulative extends AbstractConstraint {
         Profile profile = buildProfile();
         // TODO 2: check that the profile is not exceeding the capa otherwise throw an INCONSISTENCY
         for (int i = 0; i < profile.size(); i++) {
-             throw new NotImplementedException("Cumulative");
+            if (profile.get(i).height() > capa) {
+                throw InconsistencyException.INCONSISTENCY;
+            }
         }
 
         for (int i = 0; i < start.length; i++) {
             if (!start[i].isFixed()) {
                 // j is the index of the profile rectangle overlapping t
-                int j = profile.rectangleIndex(start[i].min());
+                // int j = profile.rectangleIndex(start[i].min());
                 // TODO 3: postpone i to a later point in time
                 // hint:
                 // Check that at every point in the interval
@@ -100,7 +102,42 @@ public class Cumulative extends AbstractConstraint {
                 // You may also have to check the following profile rectangle(s).
                 // Note that the activity you are currently postponing
                 // may have contributed to the profile.
-                 throw new NotImplementedException();
+
+                int mandStart = start[i].max();
+                int mandEnd   = start[i].min() + duration[i];
+                int t         = start[i].min();
+
+                while (true) {
+                    boolean fits = true;
+                    int tEnd = t + duration[i];
+
+                    // index of the rectangle that overlaps t
+                    int j = profile.rectangleIndex(t);
+
+                    // scan successive rectangles until we cover
+                    while (j < profile.size() && profile.get(j).start() < tEnd) {
+                        Profile.Rectangle rect = profile.get(j);
+                        int rectHeight = rect.height();
+
+                        // subtract i's demand if its mandatory part is already counted in this rectangle
+                        if (mandStart < rect.end() && mandEnd > rect.start()) {
+                            rectHeight -= demand[i];
+                        }
+                        // not enough remaining capacity
+                        if (rectHeight + demand[i] > capa) {
+                            t = rect.end();
+                            fits = false;
+                            break;
+                        }
+                        j++;
+                    }
+                    if (fits) break;   // the whole interval fits
+                }
+                // tighten the lower bound
+                if (t > start[i].min()) {
+                    start[i].removeBelow(t);
+                }
+
             }
         }
     }
@@ -109,9 +146,12 @@ public class Cumulative extends AbstractConstraint {
         ArrayList<Rectangle> mandatoryParts = new ArrayList<Rectangle>();
         for (int i = 0; i < start.length; i++) {
             // TODO 1: add mandatory part of activity i if any
-             throw new NotImplementedException("Cumulative");
-        }
-        return new Profile(mandatoryParts.toArray(new Profile.Rectangle[0]));
+            int mandStart = start[i].max();                 // latest start in current domain
+            int mandEnd   = start[i].min() + duration[i];   // earliest end  (exclusive)
+            if (mandStart < mandEnd) {                      // activity really has a mandatory part
+                mandatoryParts.add(new Rectangle(mandStart, mandEnd, demand[i]));
+            }        }
+        return new Profile(mandatoryParts.toArray(new Rectangle[0]));
     }
 
 }

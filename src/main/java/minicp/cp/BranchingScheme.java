@@ -32,6 +32,8 @@ import java.util.function.Supplier;
 
 import static minicp.cp.Factory.equal;
 import static minicp.cp.Factory.notEqual;
+import minicp.state.State;
+import minicp.state.StateManager;
 
 /**
  * Factory for search procedures.
@@ -179,7 +181,45 @@ public final class BranchingScheme {
      *                      it must be assigned on the left branch (and excluded on the right)
      */
     public static Supplier<Procedure[]> lastConflict(Supplier<IntVar> variableSelector, Function<IntVar, Integer> valueSelector) {
-         throw new NotImplementedException("lastConflict");
+        final java.util.concurrent.atomic.AtomicReference<IntVar> last = new java.util.concurrent.atomic.AtomicReference<>(null);
+
+        return new Supplier<Procedure[]>() {
+
+            @Override
+            public Procedure[] get() {
+                IntVar x = last.get();
+                if (x == null || x.isFixed()) {
+                    x = variableSelector.get();
+                }
+
+                final IntVar var = x;   // captured effectively final
+                final int v = valueSelector.apply(var);
+
+                // create the two decision alternatives with LC bookkeeping
+                Procedure left  = () -> doDecision(var, () -> var.getSolver().post(equal   (var, v)));
+                Procedure right = () -> doDecision(var, () -> var.getSolver().post(notEqual(var, v)));
+
+                return branch(left, right);
+            }
+
+            // Posts the decision and updates lat accordingly
+            private void doDecision(IntVar var, Procedure post) throws InconsistencyException {
+                try {
+                    post.call();
+
+                    // Success
+                    if (var.isFixed()) {
+                        last.set(null);     // conflict resolved
+                    } else {
+                        last.set(var);      // not fixed yet
+                    }
+                } catch (InconsistencyException f) {
+                    // Failure
+                    last.set(var);
+                    throw f;
+                }
+            }
+        };
     }
 
     /**
@@ -195,7 +235,50 @@ public final class BranchingScheme {
      *                      it must be assigned on the left branch (and excluded on the right)
      */
     public static Supplier<Procedure[]> conflictOrderingSearch(Supplier<IntVar> variableSelector, Function<IntVar, Integer> valueSelector) {
-         throw new NotImplementedException("conflictOrderingSearch");
+
+        return new Supplier<Procedure[]>() {
+
+            // Global list of variables ordered by most-recent conflict
+            private final java.util.LinkedList<IntVar> order = new java.util.LinkedList<>();
+
+            @Override
+            public Procedure[] get() {
+
+                IntVar x = null;
+                for (IntVar v : order) {       // first unfixed in list
+                    if (!v.isFixed()) { x = v; break; }
+                }
+
+                if (x == null) {         // fallback heuristic
+                    x = variableSelector.get();
+                    if (x == null)       // all vars fixed
+                        return EMPTY;
+                    if (!order.contains(x))      // add once, at the end
+                        order.addLast(x);
+                }
+
+                final IntVar var = x;        // captured for lambdas
+                final int    v   = valueSelector.apply(var);
+
+                Procedure left  = () -> postDecision(var,
+                        () -> var.getSolver().post(equal   (var, v)));
+                Procedure right = () -> postDecision(var,
+                        () -> var.getSolver().post(notEqual(var, v)));
+
+                return branch(left, right);
+            }
+
+            // Posts the decision; on failure moves <var> to the front of the list
+            private void postDecision(IntVar var, Procedure post) throws InconsistencyException {
+                try {
+                    post.call();
+                } catch (InconsistencyException f) {
+                    order.remove(var);
+                    order.addFirst(var);
+                    throw f;
+                }
+            }
+        };
     }
 
 }

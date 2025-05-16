@@ -57,6 +57,40 @@ public class Or extends AbstractConstraint { // x1 or x2 or ... xn
     public void propagate() {
         // update watched literals
         // TODO: implement the filtering using watched literal technique and make sure you pass all the tests
-         throw new NotImplementedException("Or");
+        int left  = wL.value();
+        int right = wR.value();
+
+        // shift wl to the first literal that is not fixed-to-false
+        while (left < n && x[left].isFixed() && x[left].isFalse()) {
+            left++;
+        }
+        wL.setValue(left);
+
+        // shift wr to the last literal that is not fixed-to-false
+        while (right >= left && x[right].isFixed() && x[right].isFalse()) {
+            right--;
+        }
+        wR.setValue(right);
+
+        // true as soon as literal is true
+        if (left <= right && (x[left].isTrue() || x[right].isTrue())) {
+            setActive(false);
+            return;
+        }
+
+        // all literals fixed to 0 -> contradiction
+        if (left > right) {
+            throw INCONSISTENCY;
+        }
+
+        // unit clause, only one literal left
+        if (left == right) {
+            x[left].fix(true);
+            setActive(false);
+            return;
+        }
+
+        x[left].propagateOnFix(this);
+        x[right].propagateOnFix(this);
     }
 }

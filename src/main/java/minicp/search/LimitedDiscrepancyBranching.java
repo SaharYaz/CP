@@ -18,7 +18,7 @@ package minicp.search;
 
 import minicp.cp.BranchingScheme;
 import minicp.util.Procedure;
-import minicp.util.exception.NotImplementedException;
+import java.util.ArrayList;
 
 import java.util.function.Supplier;
 
@@ -58,6 +58,33 @@ public class LimitedDiscrepancyBranching implements Supplier<Procedure[]> {
         // sets the curD depending on its position
         // curD = d + 0 for alts[0], ..., +i for alts[i]
 
-         throw new NotImplementedException("LimitedDiscrepancy");
+        Procedure[] original = bs.get();
+        if (original.length == 0)
+            return original;
+
+        ArrayList<Procedure> kept = new ArrayList<>(original.length);
+
+        for (int i = 0; i < original.length; i++) {
+            final int add = i;      // branch discrepancy
+
+            if (curD + add > maxD)  // would exceed limit
+                continue;
+
+            final Procedure alt = original[i];
+
+            kept.add(() -> {
+                curD += add;        // push discrepancy
+                try {
+                    alt.call();     // explore subtree
+                } finally {
+                    curD -= add;    // pop on back-track
+                }
+            });
+        }
+
+        return kept.isEmpty()
+                ? BranchingScheme.EMPTY
+                : kept.toArray(new Procedure[0]);
+
     }
 }

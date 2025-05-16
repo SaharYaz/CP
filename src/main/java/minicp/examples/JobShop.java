@@ -88,6 +88,21 @@ public class JobShop extends OptimizationProblem {
             // By default, until you have implemented the advanced
             // filtering, it only posts a cumulative with capacity 1
             // cp.post(new Disjunctive(start_m, dur_m));
+
+            for (int i = 0; i < start_m.length; i++) {
+                for (int j = i + 1; j < start_m.length; j++) {
+                    // create the constraint
+                    DisjunctiveBinary db = new DisjunctiveBinary(
+                            start_m[i], dur_m[i],
+                            start_m[j], dur_m[j]);
+
+                    // post it
+                    cp.post(db);
+
+                    //add it to the list used by the search
+                    disjunctiveBinaries.add(db);
+                }
+            }
         }
 
 
@@ -102,8 +117,8 @@ public class JobShop extends OptimizationProblem {
 
         // Search to fix the start time of all activities
 
-        Supplier<Procedure[]> branchStart = firstFail(flatten(start));
-        dfs = makeDfs(cp, branchStart);
+//        Supplier<Procedure[]> branchStart = firstFail(flatten(start));
+//        dfs = makeDfs(cp, branchStart);
 
 
         // TODO 2: Replace the search by fixing the precedence relation of
