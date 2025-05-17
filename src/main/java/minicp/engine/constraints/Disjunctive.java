@@ -47,6 +47,7 @@ public class Disjunctive extends AbstractConstraint {
 
     private final ThetaTree thetaTree;
 
+
     /**
      * Creates a disjunctive constraint that enforces
      * that for any two pair i,j of activities we have
@@ -76,7 +77,7 @@ public class Disjunctive extends AbstractConstraint {
             permLct[i] = i;
         }
         thetaTree = new ThetaTree(start.length);
-        
+
     }
 
 

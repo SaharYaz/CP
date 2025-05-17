@@ -18,6 +18,8 @@ package minicp.engine.constraints;
 import minicp.engine.core.AbstractConstraint;
 import minicp.engine.core.IntVar;
 import minicp.util.exception.NotImplementedException;
+import minicp.engine.core.Solver;
+import minicp.engine.core.Constraint;
 
 /**
  * Absolute value constraint
@@ -41,14 +43,33 @@ public class Absolute extends AbstractConstraint {
 
     public void post() {
         // TODO
-         throw new NotImplementedException("Absolute");
+        propagate();
+        x.whenDomainChange(this::propagate);
+        y.whenDomainChange(this::propagate);
     }
 
     @Override
     public void propagate() {
         // y = |x|
         // TODO
-         throw new NotImplementedException("Absolute");
-    }
+        int minAbs = Math.min(Math.abs(x.min()), Math.abs(x.max()));
+        int maxAbs = Math.max(Math.abs(x.min()), Math.abs(x.max()));
+        y.removeBelow(minAbs);
+        y.removeAbove(maxAbs);
 
+        // 2. bound x with respect to current
+        int yMin = y.min();
+        int yMax = y.max();
+        x.removeBelow(-yMax);
+        x.removeAbove(yMax);
+        while (x.min() < -yMax || (x.min() > -yMin && x.min() < yMin)) {
+            x.remove(x.min());
+        }
+        while (x.max() > yMax || (x.max() < yMin && x.max() > -yMin)) {
+            x.remove(x.max());
+        }
+        setActive(!x.isFixed() || !y.isFixed());
+    }
 }
+
+

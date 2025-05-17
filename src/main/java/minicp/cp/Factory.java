@@ -651,4 +651,9 @@ public final class Factory {
     public static Constraint allDifferentDC(IntVar[] x) {
         return new AllDifferentDC(x);
     }
+
+    public static Constraint absolute(IntVar x, IntVar y) {
+        return new minicp.engine.constraints.Absolute(x, y);
+    }
+
 }
