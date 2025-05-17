@@ -248,7 +248,6 @@ public class DFSearch {
         boolean restore = false;
     }
 
-
     private void dfs(SearchStatistics statistics, Predicate<SearchStatistics> limit, int parentId, int position) {
         Deque<Frame> stack = new ArrayDeque<>();
         Frame root = new Frame();

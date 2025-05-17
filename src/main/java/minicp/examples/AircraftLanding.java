@@ -55,65 +55,70 @@ public class AircraftLanding {
         int n = instance.nPlanes, m = instance.nLanes;
         Plane[] P = instance.planes;
 
-//        // 1)  order planes by wanted time – gives a reasonable greedy order
-//        Integer[] order = IntStream.range(0, n).boxed()
-//                .sorted(Comparator.comparingInt(i -> P[i].wantedTime))
-//                .toArray(Integer[]::new);
-//        log("Initial order (by wanted time): %s", Arrays.toString(order));
-//
-//        Random rnd     = new Random(42);
-//        long deadline = cpuNow() + CPU_LIMIT;
+        // simple greedy heuristic to get a feasible solution quickly
+        Integer[] order = IntStream.range(0, n).boxed()
+                .sorted(Comparator.comparingInt(i -> P[i].wantedTime))
+                .toArray(Integer[]::new);
+
+        int[] laneGreedy = new int[n];
+        int[] timeGreedy = new int[n];
+        Arrays.fill(laneGreedy, -1);
+        Arrays.fill(timeGreedy, -1);
+
+        int[] lastTime = new int[m];
+        int[] lastType = new int[m];
+        Arrays.fill(lastTime, -1);
+
+        boolean greedyFeasible = true;
+        for (int pid : order) {
+            Plane p = P[pid];
+            int bestLane = -1;
+            int bestTime = -1;
+            int bestCost = Integer.MAX_VALUE;
+
+            for (int l = 0; l < m; l++) {
+                int earliest = (lastTime[l] < 0) ? 0
+                        : lastTime[l] + instance.switchDelay[lastType[l]][p.type];
+                for (int cand = earliest; cand <= p.deadline; cand++) {
+                    boolean ok = true;
+                    for (int q = 0; q < n && ok; q++) if (laneGreedy[q] == l && timeGreedy[q] != -1) {
+                        int sep = instance.switchDelay[P[q].type][p.type];
+                        if (Math.abs(cand - timeGreedy[q]) < sep) ok = false;
+                    }
+                    if (!ok) continue;
+                    int c = Math.abs(cand - p.wantedTime);
+                    if (c < bestCost) {
+                        bestCost = c;
+                        bestLane = l;
+                        bestTime = cand;
+                        break;
+                    }
+                }
+            }
+
+            if (bestLane == -1) {
+                greedyFeasible = false;
+                break;
+            }
+
+            laneGreedy[pid] = bestLane;
+            timeGreedy[pid] = bestTime;
+            lastTime[bestLane] = bestTime;
+            lastType[bestLane] = p.type;
+        }
+
+        if (greedyFeasible) {
+            AircraftLandingSolution sol = new AircraftLandingSolution(instance);
+            for (int i = 0; i < n; i++) {
+                sol.landPlane(i, laneGreedy[i], timeGreedy[i]);
+            }
+            return sol;
+        }
+
+
 
         Solver cp = makeSolver();
 
-//        int[] bestT = null, bestLane = null;
-//        int   bestCost = Integer.MAX_VALUE;
-//
-//        int   permutationCnt = 0;
-//        while (cpuNow() < deadline) {
-//            permutationCnt++;
-//            if (permutationCnt % 1000 == 1)
-//                log("Starting greedy pass #%d (bestCost=%d)", permutationCnt, bestCost);
-//
-//            // shuffle order after the 1st try to diversify
-//            if (permutationCnt > 1) Collections.shuffle(Arrays.asList(order), rnd);
-//
-//            int[] t    = new int[n];   Arrays.fill(t,    -1);
-//            int[] lane = new int[n];   Arrays.fill(lane, -1);
-//            int[] lastT   = new int[m]; Arrays.fill(lastT,   -1);
-//            int[] lastTyp = new int[m];
-//            boolean feasible = true;
-//
-//            //  greedy insertion for this permutation
-//            for (int step = 0; step < n && feasible; step++) {
-//                int id = order[step];
-//                Plane p = P[id];
-//
-//                int pickLane = -1, pickTime = -1, pickCost = Integer.MAX_VALUE;
-//
-//                for (int l = 0; l < m; l++) {
-//                    int earliest = (lastT[l] < 0) ? 0 :
-//                            lastT[l] + instance.switchDelay[lastTyp[l]][p.type];
-//                    for (int cand = earliest; cand <= p.deadline; cand++) {
-//                        // check separation wrt same‑lane planes already scheduled
-//                        boolean ok = true;
-//                        for (int q = 0; q < n && ok; q++) if (t[q] != -1 && lane[q] == l) {
-//                            int sep = instance.switchDelay[P[q].type][p.type];
-//                            if (Math.abs(cand - t[q]) < sep) ok = false;
-//                        }
-//                        if (!ok) continue;
-//                        int c = Math.abs(cand - p.wantedTime);
-//                        if (c < pickCost) {
-//                            pickCost = c; pickLane = l; pickTime = cand;
-//                            break;             // earliest feasible time on this lane is cheapest
-//                        }
-//                    }
-//                }
-//                if (pickLane == -1) {
-//                    feasible = false;
-//                    log("  ✗  plane %d could not be placed (perm #%d step %d)", id, permutationCnt, step);
-//                    break;                      // restart – this permutation failed
-//                }
         IntVar[] lane = makeIntVarArray(cp, n, m);
         IntVar[] time = IntStream.range(0, n)
                 .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))

@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
+import minicp.engine.constraints.IsOr;
 
 import static minicp.cp.BranchingScheme.*;
 import static minicp.cp.Factory.*;
@@ -115,7 +116,7 @@ public class Steel extends OptimizationProblem {
 
             for (int j = 0; j < nSlab; j++) {
                 // for each color, is it present in the slab
-                IntVar[] presence = new IntVar[nCol];
+                BoolVar[] presence = new BoolVar[nCol];
 
                 for (int col = 0; col < nCol; col++) {
                     presence[col] = makeBoolVar(cp);
@@ -126,36 +127,84 @@ public class Steel extends OptimizationProblem {
                     }
 
                     // TODO 2: model that presence[col] is true iff at least one order with color col is placed in slab j
-
+                    BoolVar[] arr = inSlabWithColor.toArray(new BoolVar[0]);
+//                    cp.post(new IsOr(presence[col], inSlabWithColor.toArray(new BoolVar[0])));
+                    if (arr.length == 0) {
+                        cp.post(equal(presence[col], 0));
+                    } else {
+                        cp.post(new IsOr(presence[col], arr));
+                    }
                 }
                 // TODO 3: restrict the number of colors present in slab j to be <= 2
-
+                IntVar two = makeIntVar(cp, 2, 2);
+                cp.post(new LessOrEqual(sum(presence), two));
             }
 
             // bin packing constraint
             for (int j = 0; j < nSlab; j++) {
-                IntVar[] wj = new IntVar[nSlab];
+                IntVar[] wj = new IntVar[nOrder];
                 for (int i = 0; i < nOrder; i++) {
                     wj[i] = mul(inSlab[j][i], w[i]);
                 }
                 cp.post(sum(wj, l[j]));
+                cp.post(lessOrEqual(l[j], maxCapa));
             }
 
             // TODO 4: add the redundant constraint that the sum of the loads is equal to the sum of elements
+            int totalWeight = IntStream.of(w).sum();
+            IntVar totalLoad = sum(l);         // build the Sum view once
+            cp.post(equal(totalLoad, totalWeight));
 
 
             // TODO 1: model the objective function using element constraint + a sum constraint
-            totLoss = null;
+            IntVar[] lossOfSlab = new IntVar[nSlab];
+            for (int j = 0; j < nSlab; j++) {
+                lossOfSlab[j] = element(loss, l[j]);      // loss(load)
+            }
+            totLoss = sum(lossOfSlab);                    // loss
 
-            if (totLoss == null)
-                throw new NotImplementedException("Steel");
 
             objective = cp.minimize(totLoss);
 
             // TODO 5 add static symmetry breaking constraint
+            for (int j = 0; j < nSlab - 1; j++)
+                cp.post(lessOrEqual(l[j + 1], l[j]));
+
+
 
             // TODO 6 implement a dynamic symmetry breaking during search
-            dfs = makeDfs(cp,firstFail(x));
+//            dfs = makeDfs(cp,firstFail(x));
+            dfs = makeDfs(cp, () -> {
+                // choose an unfixed order with smallest domain
+                int idx = -1, bestSize = Integer.MAX_VALUE;
+                for (int i = 0; i < nOrder; i++) {
+                    if (!x[i].isFixed() && x[i].size() < bestSize) {
+                        idx = i; bestSize = x[i].size();
+                    }
+                }
+                if (idx == -1) return new Procedure[0];   // all fixed
+
+                // current maximum slab index already used
+                int maxUsed = -1;
+                for (int i = 0; i < nOrder; i++)
+                    if (x[i].isFixed()) maxUsed = Math.max(maxUsed, x[i].min());
+
+                int limit = maxUsed + 1;            // symmetry theorem
+                final int fixedIdx = idx;
+                ArrayList<Procedure> branches = new ArrayList<>();
+                for (int v = 0; v <= limit; v++) {
+                    if (x[fixedIdx].contains(v)) { // use fixedIdx instead of idx
+                        final int vv = v;
+                        branches.add(() -> x[fixedIdx].fix(vv));  // capture fixedIdx & vv
+                    }
+                }
+                if (branches.isEmpty()) {
+                    int vv = x[fixedIdx].min();
+                    branches.add(() -> x[fixedIdx].fix(vv));
+                }
+                return branches.toArray(new Procedure[0]);
+            });
+
         } catch (InconsistencyException e) {
             e.printStackTrace();
         }
