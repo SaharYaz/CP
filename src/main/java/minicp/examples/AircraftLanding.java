@@ -22,9 +22,11 @@ import java.util.*;
 
 public class AircraftLanding {
     /* ‑‑ configuration flags ‑‑ */
-    private static final boolean VERBOSE   = true;      // global on/off switch
+    private static final boolean VERBOSE   = false;      // global on/off switch
     private static final int     LOG_EVERY = 1_000;     // local‑search iterations to skip between logs
-    private static final long    CPU_LIMIT = 170_000_000_000L;   // 170 s (nanoseconds)
+    private static final long    CPU_LIMIT = 175_000_000_000L;   // 175 s (safety)
+    private static final java.lang.management.ThreadMXBean TMX =
+            java.lang.management.ManagementFactory.getThreadMXBean();
 
     private static final long t0 = System.nanoTime();
     private static void log(String fmt, Object... args) {
@@ -33,11 +35,9 @@ public class AircraftLanding {
         System.out.printf("[%8.1f ms] ", ms);
         System.out.printf(fmt + "%n", args);
     }
+    private static long cpuNow() { return TMX.getCurrentThreadCpuTime(); }
+
     // ------------------------------------------------------------------
-    private static long permCnt     = 0;   // permutations tried
-    private static long feasCnt     = 0;   // permutations that ended feasible
-    private static long lsItersTot  = 0;   // local-search iterations (all perms)
-    private static long nextTick    = t0 + 1_000_000_000L; // 1 s wall-clock
 
     /**
      * Main function that provides a solution to an instance
@@ -58,13 +58,13 @@ public class AircraftLanding {
         log("Initial order (by wanted time): %s", Arrays.toString(order));
 
         Random rnd     = new Random(42);
-        long deadline  = System.nanoTime() + CPU_LIMIT;
+        long deadline = cpuNow() + CPU_LIMIT;
 
         int[] bestT = null, bestLane = null;
         int   bestCost = Integer.MAX_VALUE;
 
         int   permutationCnt = 0;
-        while (System.nanoTime() < deadline) {
+        while (cpuNow() < deadline) {
             permutationCnt++;
             if (permutationCnt % 1000 == 1)
                 log("Starting greedy pass #%d (bestCost=%d)", permutationCnt, bestCost);
@@ -153,11 +153,11 @@ public class AircraftLanding {
         }
 
         //  If greedy got nothing (rare) fall back to complete enumeration
-        if (bestT == null) {
-            log("Greedy failed – switching to exhaustive search");
-            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
-            return sols.isEmpty() ? null : sols.get(0);
-        }
+//        if (bestT == null) {
+//            log("Greedy failed – switching to exhaustive search");
+//            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
+//            return sols.isEmpty() ? null : sols.get(0);
+//        }
 
         AircraftLandingSolution sol = new AircraftLandingSolution(instance);
         for (int i = 0; i < n; i++) sol.landPlane(i, bestLane[i], bestT[i]);
@@ -507,9 +507,15 @@ public class AircraftLanding {
 
     public static void main(String[] args) {
         //TODO change file to test the various instances.
-        AircraftLandingInstance instance = new AircraftLandingInstance("data/alp/training");
+//        AircraftLandingInstance instance = new AircraftLandingInstance("data/alp/training");
+        if (args.length != 1) {
+            System.err.println("Usage: java … AircraftLanding <instance-file>");
+            System.exit(1);
+        }
+        AircraftLandingInstance instance = new AircraftLandingInstance(args[0]);
         AircraftLanding alp = new AircraftLanding();
         AircraftLandingSolution solution = alp.solve(instance);
         System.out.println(solution);
+        System.exit(0);
     }
 }
