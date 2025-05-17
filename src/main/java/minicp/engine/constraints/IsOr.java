@@ -33,8 +33,10 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
     private int[] freeVarIndex;
     private StateInt nFreeVars;
 
-    private final Or or;
-    private boolean orPosted = false;
+//    private final Or or;
+//    private boolean orPosted = false;
+    private StateInt wL;                     // watched literal left
+    private StateInt wR;                     // watched literal right
 
     /**
      * Creates a constraint such that
@@ -49,13 +51,15 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
         this.b = b;
         this.x = x;
         this.n = x.length;
-        or = new Or(x);
+//        or = new Or(x);
 
         nFreeVars = getSolver().getStateManager().makeStateInt(n);
         freeVarIndex = new int[n];
         for (int i = 0; i < n; i++) {
             freeVarIndex[i] = i;
         }
+        wL = getSolver().getStateManager().makeStateInt(0);
+        wR = getSolver().getStateManager().makeStateInt(n - 1);
     }
 
     @Override
@@ -67,19 +71,54 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
         propagate();
     }
 
-    private void postOrIfNeeded() {
-        if (!orPosted) {
-            getSolver().post(or);
-            orPosted = true;
+//    private void postOrIfNeeded() {
+//        if (!orPosted) {
+//            getSolver().post(or);
+//            orPosted = true;
+//        }
+//    }
+
+    private void propagateOr() {
+        int left = wL.value();
+        int right = wR.value();
+
+        // shift wl to the first literal that is not fixed to false
+        while (left < n && x[left].isFixed() && x[left].isFalse()) {
+            left++;
         }
+        wL.setValue(left);
+
+        // shift wr to the last literal that is not fixed to false
+        while (right >= left && x[right].isFixed() && x[right].isFalse()) {
+            right--;
+        }
+        wR.setValue(right);
+
+        // true if one watched literal is true
+        if (left <= right && (x[left].isTrue() || x[right].isTrue())) {
+            return;
+        }
+
+        if (left > right) {
+            throw INCONSISTENCY;
+        }
+
+        if (left == right) {
+            x[left].fix(true);
+            return;
+        }
+
+        x[left].propagateOnFix(this);
+        x[right].propagateOnFix(this);
     }
+
 
     @Override
     public void propagate() {
         // TODO Implement the constraint as efficiently as possible and make sure you pass all the tests
 
         if (b.isTrue()) {           // b = 1
-            postOrIfNeeded();
+            propagateOr();
             return;
         }
 
@@ -115,7 +154,7 @@ public class IsOr extends AbstractConstraint { // b <=> x1 or x2 or ... xn
 
         if (someTrue) {              // clause satisfied
             b.fix(true);
-            postOrIfNeeded();
+            propagateOr();
             return;
         }
 
