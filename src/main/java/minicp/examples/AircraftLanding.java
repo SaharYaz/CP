@@ -293,10 +293,10 @@ public class AircraftLanding {
 
         @Override public void post() {
             // Wake when lanes get bound or times get tighter
-//            li.propagateOnBoundChange(this);
-//            lj.propagateOnBoundChange(this);
-//            ti.propagateOnBoundChange(this);
-//            tj.propagateOnBoundChange(this);
+            li.propagateOnBoundChange(this);
+            lj.propagateOnBoundChange(this);
+            ti.propagateOnBoundChange(this);
+            tj.propagateOnBoundChange(this);
             propagate();
         }
 

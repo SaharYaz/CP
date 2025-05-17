@@ -198,7 +198,10 @@ public class Steel extends OptimizationProblem {
                         branches.add(() -> x[fixedIdx].fix(vv));  // capture fixedIdx & vv
                     }
                 }
-
+                if (branches.isEmpty()) {
+                    int vv = x[fixedIdx].min();
+                    branches.add(() -> x[fixedIdx].fix(vv));
+                }
                 return branches.toArray(new Procedure[0]);
             });
 

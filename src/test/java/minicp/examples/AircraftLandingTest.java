@@ -70,9 +70,9 @@ public class AircraftLandingTest {
     @CsvSource({
             "data/alp/training",
 //            "data/alp/custom0",
-//            "data/alp/custom1",
+            "data/alp/custom1",
             "data/alp/custom2",
-//            "data/alp/custom3",
+            "data/alp/custom3",
     })
     public void testFirstSolutionFound(String instanceFile) {
         AircraftLanding.AircraftLandingInstance instance = new AircraftLanding.AircraftLandingInstance(instanceFile);
