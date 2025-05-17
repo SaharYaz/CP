@@ -136,8 +136,9 @@ public class Steel extends OptimizationProblem {
                     }
                 }
                 // TODO 3: restrict the number of colors present in slab j to be <= 2
-                IntVar two = makeIntVar(cp, 2, 2);
-                cp.post(new LessOrEqual(sum(presence), two));
+//                IntVar two = makeIntVar(cp, 2, 2);
+//                cp.post(new LessOrEqual(sum(presence), two));
+                cp.post(lessOrEqual(sum(presence), 2));
             }
 
             // bin packing constraint

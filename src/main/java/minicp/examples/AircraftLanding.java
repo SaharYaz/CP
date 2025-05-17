@@ -124,11 +124,6 @@ public class AircraftLanding {
                 .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
                 .toArray(IntVar[]::new);
 
-//                t[id]       = pickTime;
-//                lane[id]    = pickLane;
-//                lastT[pickLane]   = pickTime;
-//                lastTyp[pickLane] = p.type;
-
         IntVar[] absCost = new IntVar[n];
         for (int i = 0; i < n; i++) {
             IntVar diff = plus(time[i], -P[i].wantedTime);
@@ -138,64 +133,25 @@ public class AircraftLanding {
         IntVar totalCost = sum(absCost);
         Objective obj = cp.minimize(totalCost);
 
-//                if (VERBOSE && step % 50 == 0)
-//                    log("    placed plane %-3d at t=%-4d on lane %d (partial)" , id, pickTime, pickLane);
-//            }
+
         for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
             int sepIJ = instance.switchDelay[P[i].type][P[j].type];
             int sepJI = instance.switchDelay[P[j].type][P[i].type];
             cp.post(new Separation(lane[i], lane[j], time[i], time[j], sepIJ, sepJI));
         }
-//            if (!feasible) continue;             // try another permutation
 
         IntVar[] all = new IntVar[2 * n];
         System.arraycopy(time, 0, all, 0, n);
         System.arraycopy(lane, 0, all, n, n);
 
-//            /* full schedule built – compute global cost */
-//            int curCost = scheduleCost(t, instance);
-//            if (curCost < bestCost) {
-//                bestCost = curCost;
-//                bestT    = Arrays.copyOf(t,    n);
-//                bestLane = Arrays.copyOf(lane, n);
-//                log("  ✓  new incumbent cost=%d after %d permutations", bestCost, permutationCnt);
         Supplier<Procedure[]> branching = lastConflict(
                 () -> selectMin(all, v -> v.size() > 1, IntVar::size),
                 IntVar::min
         );
 
-//                if (bestCost == 0) break;       // cannot do better
-//            }
 
         DFSearch dfs = makeDfs(cp, branching);
 
-//        // 2) tiny random local search – try to swap lanes to reduce cost
-//            long improveUntil = System.nanoTime() + 50_000_000L; // 50 ms tuning
-//            int  lsIter = 0;
-//            while (System.nanoTime() < improveUntil) {
-//                lsIter++;
-//                int a = rnd.nextInt(n), b = rnd.nextInt(n); if (a == b) continue;
-//                int tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
-//                if (respectsLaneSeparation(t, lane, instance)) {
-//                    int newCost = scheduleCost(t, instance);
-//                    if (newCost < curCost) {
-//                        curCost = newCost; if (lsIter % LOG_EVERY == 0)
-//                            log("    LS   improved to %d (iter=%d)", curCost, lsIter);
-//                    } else { // rollback
-//                        tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
-//                    }
-//                } else {
-//                    tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp; // rollback infeasible
-//                }
-//            }
-//        }
-//
-//        //  If greedy got nothing, fall back to complete enumeration
-//        if (bestT == null && n <= 12) {          // 12 planes or fewer is safe
-//            log("Greedy failed – switching to exhaustive search");
-//            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
-//            return sols.isEmpty() ? null : sols.get(0);
-//        }
         AircraftLandingSolution[] best = new AircraftLandingSolution[1];
         dfs.onSolution(() -> {
             AircraftLandingSolution s = new AircraftLandingSolution(instance);
@@ -206,12 +162,6 @@ public class AircraftLanding {
         long deadline = cpuNow() + CPU_LIMIT;
         dfs.optimize(obj, stats -> cpuNow() >= deadline);
         return best[0];
-
-//        AircraftLandingSolution sol = new AircraftLandingSolution(instance);
-//        for (int i = 0; i < n; i++) sol.landPlane(i, bestLane[i], bestT[i]);
-//        sol.compute();
-//        log("Finished: cost=%d", sol.compute());
-//        return sol;
     }
     /* helper used by local tweaks */
     private static boolean isGloballyFeasible(int[] time, Plane[] planes, AircraftLandingInstance ins) {
@@ -243,13 +193,11 @@ public class AircraftLanding {
                 .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
                 .toArray(IntVar[]::new);
 
-        // 0-1 absolute deviation for every plane            y_i = |time[i] – wanted|
         IntVar[] absCost = new IntVar[n];
         for (int i = 0; i < n; i++) {
             absCost[i] = makeIntVar(cp, 0, P[i].deadline);          // upper bound is safe
-//            cp.post(new Absolute(sub(time[i], P[i].wantedTime), absCost[i]));
             IntVar diff = plus(time[i], -P[i].wantedTime);   // diff = time[i] - wantedTime
-            cp.post(new Absolute(diff, absCost[i]));         // absCost[i] = |diff|
+            cp.post(new Absolute(diff, absCost[i]));
         }
         IntVar totalCost = sum(absCost);                // |t-wanted|
         Objective obj    = cp.minimize(totalCost);      // we will give this to DFS
@@ -323,7 +271,6 @@ public class AircraftLanding {
         }
     }
 
-
     private static void backtrack(int k,
                                   Integer[] order,
                                   AircraftLandingInstance instance,
@@ -389,9 +336,6 @@ public class AircraftLanding {
             if (times[i] >= 0) s.landPlane(i, lane[i], times[i]);
         return s;
     }
-
-
-
 
     /**
      * A plane in the problem
