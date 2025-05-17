@@ -152,12 +152,12 @@ public class AircraftLanding {
             }
         }
 
-        //  If greedy got nothing (rare) fall back to complete enumeration
-//        if (bestT == null) {
-//            log("Greedy failed – switching to exhaustive search");
-//            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
-//            return sols.isEmpty() ? null : sols.get(0);
-//        }
+        //  If greedy got nothing, fall back to complete enumeration
+        if (bestT == null && n <= 12) {          // 12 planes or fewer is safe
+            log("Greedy failed – switching to exhaustive search");
+            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
+            return sols.isEmpty() ? null : sols.get(0);
+        }
 
         AircraftLandingSolution sol = new AircraftLandingSolution(instance);
         for (int i = 0; i < n; i++) sol.landPlane(i, bestLane[i], bestT[i]);
@@ -516,6 +516,5 @@ public class AircraftLanding {
         AircraftLanding alp = new AircraftLanding();
         AircraftLandingSolution solution = alp.solve(instance);
         System.out.println(solution);
-        System.exit(0);
     }
 }
