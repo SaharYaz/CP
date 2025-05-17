@@ -190,6 +190,8 @@ public final class BranchingScheme {
                 IntVar x = last.get();
                 if (x == null || x.isFixed()) {
                     x = variableSelector.get();
+                    if (x == null)
+                        return EMPTY; // no variable left -> solution reached
                 }
 
                 final IntVar var = x;   // captured effectively final
