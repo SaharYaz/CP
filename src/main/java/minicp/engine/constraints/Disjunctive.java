@@ -38,7 +38,7 @@ public class Disjunctive extends AbstractConstraint {
     private final int[] duration;
     private final IntVar[] end;
 
-    
+
     private final Integer[] permLct;
     private final Integer[] permEst;
     private final int[] rankEst;
@@ -46,8 +46,6 @@ public class Disjunctive extends AbstractConstraint {
     private final int[] endMax;
 
     private final ThetaTree thetaTree;
-    private final boolean postMirror;
-
 
     /**
      * Creates a disjunctive constraint that enforces
@@ -64,7 +62,6 @@ public class Disjunctive extends AbstractConstraint {
 
     private Disjunctive(IntVar[] start, int[] duration, boolean postMirror) {
         super(start[0].getSolver());
-        this.postMirror = postMirror;
         this.start = start;
         this.duration = duration;
         this.end = Factory.makeIntVarArray(start.length, i -> plus(start[i], duration[i]));
@@ -86,10 +83,6 @@ public class Disjunctive extends AbstractConstraint {
     @Override
     public void post() {
 
-        for (int i = 0; i < start.length; i++) {
-            start[i].propagateOnBoundChange(this);
-        }
-
         int[] demands = new int[start.length];
         for (int i = 0; i < start.length; i++) {
             demands[i] = 1;
@@ -98,19 +91,9 @@ public class Disjunctive extends AbstractConstraint {
 
 
         // TODO 1: replace by posting binary decomposition (DisjunctiveBinary) using IsLessOrEqualVar
-        for (int i = 0; i < start.length; i++) {
-            for (int j = i + 1; j < start.length; j++) {
-                getSolver().post(new DisjunctiveBinary(start[i], duration[i], start[j], duration[j]), false);
-            }
-        }
-
         // TODO 2: add the mirror filtering as done in the Cumulative Constraint
-        if (postMirror) {
-            IntVar[] startMirror = Factory.makeIntVarArray(start.length, k -> minus(end[k]));
-            getSolver().post(new Disjunctive(startMirror, duration, false), false);
-        }
+        throw new NotImplementedException("Disjunctive");
 
-        propagate();
     }
 
     @Override
@@ -161,61 +144,13 @@ public class Disjunctive extends AbstractConstraint {
      * @return true if one domain was changed by the detectable precedence algo
      */
     public boolean detectablePrecedence() {
-        update();
-        Arrays.sort(permLct, Comparator.comparingInt(i -> end[i].max()));
-        thetaTree.reset();
-        int k = 0;
-        boolean changed = false;
-
-        for (int idx = 0; idx < start.length; idx++) {
-            int j = permLct[idx];
-
-            while (k < start.length && startMin[permEst[k]] + duration[permEst[k]] <= end[j].max()) {
-                int a = permEst[k];
-                thetaTree.insert(rankEst[a], startMin[a] + duration[a], duration[a]);
-                k++;
-            }
-
-            thetaTree.remove(rankEst[j]);
-            if (thetaTree.getECT() > start[j].min()) {
-                start[j].removeBelow(thetaTree.getECT());
-                changed = true;
-            }
-            thetaTree.insert(rankEst[j], startMin[j] + duration[j], duration[j]);
-        }
-
-        return changed;
+        throw new NotImplementedException("Disjunctive");
     }
 
     /**
      * @return true if one domain was changed by the not-last algo
      */
     public boolean notLast() {
-        update();
-        Arrays.sort(permEst, Comparator.comparingInt(i -> start[i].min()));
-        Arrays.sort(permLct, Comparator.comparingInt(i -> end[i].max()));
-
-        thetaTree.reset();
-        int k = start.length - 1;
-        boolean changed = false;
-
-        for (int idx = start.length - 1; idx >= 0; idx--) {
-            int j = permEst[idx];
-
-            while (k >= 0 && end[permLct[k]].max() > startMin[j]) {
-                int a = permLct[k];
-                thetaTree.insert(rankEst[a], endMax[a] - duration[a], duration[a]);
-                k--;
-            }
-
-            thetaTree.remove(rankEst[j]);
-            if (thetaTree.getECT() > endMax[j] - duration[j]) {
-                end[j].removeAbove(thetaTree.getECT());
-                changed = true;
-            }
-            thetaTree.insert(rankEst[j], endMax[j] - duration[j], duration[j]);
-        }
-
-        return changed;
+        throw new NotImplementedException("Disjunctive");
     }
 }

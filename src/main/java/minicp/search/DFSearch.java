@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.Deque;
+import java.util.ArrayDeque;
 
 /**
  * Depth First Search Branch and Bound implementation
@@ -237,33 +239,72 @@ public class DFSearch {
         return statistics.get();
     }
 
+    private static class Frame {
+        int parentId;
+        int position;
+        int nodeId;
+        Procedure[] branches = null;
+        int next = 0;
+        boolean restore = false;
+    }
+
 
     private void dfs(SearchStatistics statistics, Predicate<SearchStatistics> limit, int parentId, int position) {
-        if (limit.test(statistics))
-            throw new StopSearchException();
-        Procedure[] branches = branching.get();
-        final int nodeId = currNodeIdId++;
+        Deque<Frame> stack = new ArrayDeque<>();
+        Frame root = new Frame();
+        root.parentId = parentId;
+        root.position = position;
+        stack.push(root);
 
-        if (branches.length == 0) {
-            statistics.incrSolutions();
-            notifySolution(parentId,nodeId, position);
-        } else {
-            notifyBranch(parentId,nodeId, position, branches.length);
-            int pos = 0;
-            for (Procedure b : branches) {
-                final int p = pos;
-                sm.withNewState(() -> {
-                    try {
-                        statistics.incrNodes();
-                        b.call();
-                        dfs(statistics, limit, nodeId, p);
-                    } catch (InconsistencyException e) {
-                        currNodeIdId++;
-                        statistics.incrFailures();
-                        notifyFailure(parentId,nodeId, p);
-                    }
-                });
-                pos += 1;
+        while (!stack.isEmpty()) {
+            if (limit.test(statistics)) {
+                while (!stack.isEmpty()) {
+                    Frame f = stack.pop();
+                    if (f.restore) sm.restoreState();
+                }
+                throw new StopSearchException();
+            }
+
+            Frame f = stack.peek();
+
+            if (f.branches == null) {
+                f.branches = branching.get();
+                f.nodeId = currNodeIdId++;
+                if (f.branches.length == 0) {
+                    statistics.incrSolutions();
+                    notifySolution(f.parentId, f.nodeId, f.position);
+                    stack.pop();
+                    if (f.restore) sm.restoreState();
+                    continue;
+                } else {
+                    notifyBranch(f.parentId, f.nodeId, f.position, f.branches.length);
+                    f.next = 0;
+                    continue;
+                }
+            }
+
+            if (f.next >= f.branches.length) {
+                stack.pop();
+                if (f.restore) sm.restoreState();
+                continue;
+            }
+
+            int p = f.next++;
+            Procedure b = f.branches[p];
+            sm.saveState();
+            try {
+                statistics.incrNodes();
+                b.call();
+                Frame child = new Frame();
+                child.parentId = f.nodeId;
+                child.position = p;
+                child.restore = true;
+                stack.push(child);
+            } catch (InconsistencyException e) {
+                currNodeIdId++;
+                statistics.incrFailures();
+                notifyFailure(f.parentId, f.nodeId, p);
+                sm.restoreState();
             }
         }
     }
