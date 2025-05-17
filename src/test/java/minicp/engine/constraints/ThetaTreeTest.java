@@ -38,4 +38,27 @@ public class ThetaTreeTest {
         assertEquals(Integer.MIN_VALUE, thetaTree.getECT());
     }
 
+    @Test
+    public void simpleTest1() {
+        ThetaTree thetaTree = new ThetaTree(4);
+
+        // manually computed ECT progression
+        thetaTree.insert(0, 10, 5);
+        assertEquals(10, thetaTree.getECT());
+
+        thetaTree.insert(1, 15, 3);
+        assertEquals(15, thetaTree.getECT());
+
+        thetaTree.insert(2, 12, 4);
+        assertEquals(19, thetaTree.getECT());
+
+        thetaTree.insert(3, 18, 2);
+        assertEquals(21, thetaTree.getECT());
+
+        thetaTree.remove(1);
+        assertEquals(18, thetaTree.getECT());
+
+        thetaTree.reset();
+        assertEquals(Integer.MIN_VALUE, thetaTree.getECT());
+    }
 }

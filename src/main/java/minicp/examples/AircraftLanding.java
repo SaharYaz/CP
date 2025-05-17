@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.function.Supplier;
 
 import java.util.Arrays;
 import java.util.Random;
@@ -18,6 +19,9 @@ import minicp.search.SearchStatistics;
 import minicp.util.exception.InconsistencyException;
 import minicp.util.io.InputReader;
 import java.util.*;
+import minicp.engine.constraints.Absolute;
+import minicp.search.Objective;
+import minicp.util.Procedure;
 
 
 public class AircraftLanding {
@@ -51,119 +55,158 @@ public class AircraftLanding {
         int n = instance.nPlanes, m = instance.nLanes;
         Plane[] P = instance.planes;
 
-        // 1)  order planes by wanted time – gives a reasonable greedy order
-        Integer[] order = IntStream.range(0, n).boxed()
-                .sorted(Comparator.comparingInt(i -> P[i].wantedTime))
-                .toArray(Integer[]::new);
-        log("Initial order (by wanted time): %s", Arrays.toString(order));
+//        // 1)  order planes by wanted time – gives a reasonable greedy order
+//        Integer[] order = IntStream.range(0, n).boxed()
+//                .sorted(Comparator.comparingInt(i -> P[i].wantedTime))
+//                .toArray(Integer[]::new);
+//        log("Initial order (by wanted time): %s", Arrays.toString(order));
+//
+//        Random rnd     = new Random(42);
+//        long deadline = cpuNow() + CPU_LIMIT;
 
-        Random rnd     = new Random(42);
+        Solver cp = makeSolver();
+
+//        int[] bestT = null, bestLane = null;
+//        int   bestCost = Integer.MAX_VALUE;
+//
+//        int   permutationCnt = 0;
+//        while (cpuNow() < deadline) {
+//            permutationCnt++;
+//            if (permutationCnt % 1000 == 1)
+//                log("Starting greedy pass #%d (bestCost=%d)", permutationCnt, bestCost);
+//
+//            // shuffle order after the 1st try to diversify
+//            if (permutationCnt > 1) Collections.shuffle(Arrays.asList(order), rnd);
+//
+//            int[] t    = new int[n];   Arrays.fill(t,    -1);
+//            int[] lane = new int[n];   Arrays.fill(lane, -1);
+//            int[] lastT   = new int[m]; Arrays.fill(lastT,   -1);
+//            int[] lastTyp = new int[m];
+//            boolean feasible = true;
+//
+//            //  greedy insertion for this permutation
+//            for (int step = 0; step < n && feasible; step++) {
+//                int id = order[step];
+//                Plane p = P[id];
+//
+//                int pickLane = -1, pickTime = -1, pickCost = Integer.MAX_VALUE;
+//
+//                for (int l = 0; l < m; l++) {
+//                    int earliest = (lastT[l] < 0) ? 0 :
+//                            lastT[l] + instance.switchDelay[lastTyp[l]][p.type];
+//                    for (int cand = earliest; cand <= p.deadline; cand++) {
+//                        // check separation wrt same‑lane planes already scheduled
+//                        boolean ok = true;
+//                        for (int q = 0; q < n && ok; q++) if (t[q] != -1 && lane[q] == l) {
+//                            int sep = instance.switchDelay[P[q].type][p.type];
+//                            if (Math.abs(cand - t[q]) < sep) ok = false;
+//                        }
+//                        if (!ok) continue;
+//                        int c = Math.abs(cand - p.wantedTime);
+//                        if (c < pickCost) {
+//                            pickCost = c; pickLane = l; pickTime = cand;
+//                            break;             // earliest feasible time on this lane is cheapest
+//                        }
+//                    }
+//                }
+//                if (pickLane == -1) {
+//                    feasible = false;
+//                    log("  ✗  plane %d could not be placed (perm #%d step %d)", id, permutationCnt, step);
+//                    break;                      // restart – this permutation failed
+//                }
+        IntVar[] lane = makeIntVarArray(cp, n, m);
+        IntVar[] time = IntStream.range(0, n)
+                .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
+                .toArray(IntVar[]::new);
+
+//                t[id]       = pickTime;
+//                lane[id]    = pickLane;
+//                lastT[pickLane]   = pickTime;
+//                lastTyp[pickLane] = p.type;
+
+        IntVar[] absCost = new IntVar[n];
+        for (int i = 0; i < n; i++) {
+            IntVar diff = plus(time[i], -P[i].wantedTime);
+            absCost[i] = makeIntVar(cp, 0, P[i].deadline);
+            cp.post(new Absolute(diff, absCost[i]));
+        }
+        IntVar totalCost = sum(absCost);
+        Objective obj = cp.minimize(totalCost);
+
+//                if (VERBOSE && step % 50 == 0)
+//                    log("    placed plane %-3d at t=%-4d on lane %d (partial)" , id, pickTime, pickLane);
+//            }
+        for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
+            int sepIJ = instance.switchDelay[P[i].type][P[j].type];
+            int sepJI = instance.switchDelay[P[j].type][P[i].type];
+            cp.post(new Separation(lane[i], lane[j], time[i], time[j], sepIJ, sepJI));
+        }
+//            if (!feasible) continue;             // try another permutation
+
+        IntVar[] all = new IntVar[2 * n];
+        System.arraycopy(time, 0, all, 0, n);
+        System.arraycopy(lane, 0, all, n, n);
+
+//            /* full schedule built – compute global cost */
+//            int curCost = scheduleCost(t, instance);
+//            if (curCost < bestCost) {
+//                bestCost = curCost;
+//                bestT    = Arrays.copyOf(t,    n);
+//                bestLane = Arrays.copyOf(lane, n);
+//                log("  ✓  new incumbent cost=%d after %d permutations", bestCost, permutationCnt);
+        Supplier<Procedure[]> branching = lastConflict(
+                () -> selectMin(all, v -> v.size() > 1, IntVar::size),
+                IntVar::min
+        );
+
+//                if (bestCost == 0) break;       // cannot do better
+//            }
+
+        DFSearch dfs = makeDfs(cp, branching);
+
+//        // 2) tiny random local search – try to swap lanes to reduce cost
+//            long improveUntil = System.nanoTime() + 50_000_000L; // 50 ms tuning
+//            int  lsIter = 0;
+//            while (System.nanoTime() < improveUntil) {
+//                lsIter++;
+//                int a = rnd.nextInt(n), b = rnd.nextInt(n); if (a == b) continue;
+//                int tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
+//                if (respectsLaneSeparation(t, lane, instance)) {
+//                    int newCost = scheduleCost(t, instance);
+//                    if (newCost < curCost) {
+//                        curCost = newCost; if (lsIter % LOG_EVERY == 0)
+//                            log("    LS   improved to %d (iter=%d)", curCost, lsIter);
+//                    } else { // rollback
+//                        tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
+//                    }
+//                } else {
+//                    tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp; // rollback infeasible
+//                }
+//            }
+//        }
+//
+//        //  If greedy got nothing, fall back to complete enumeration
+//        if (bestT == null && n <= 12) {          // 12 planes or fewer is safe
+//            log("Greedy failed – switching to exhaustive search");
+//            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
+//            return sols.isEmpty() ? null : sols.get(0);
+//        }
+        AircraftLandingSolution[] best = new AircraftLandingSolution[1];
+        dfs.onSolution(() -> {
+            AircraftLandingSolution s = new AircraftLandingSolution(instance);
+            for (int i = 0; i < n; i++)
+                s.landPlane(i, lane[i].min(), time[i].min());
+            best[0] = s;
+        });
         long deadline = cpuNow() + CPU_LIMIT;
+        dfs.optimize(obj, stats -> cpuNow() >= deadline);
+        return best[0];
 
-        int[] bestT = null, bestLane = null;
-        int   bestCost = Integer.MAX_VALUE;
-
-        int   permutationCnt = 0;
-        while (cpuNow() < deadline) {
-            permutationCnt++;
-            if (permutationCnt % 1000 == 1)
-                log("Starting greedy pass #%d (bestCost=%d)", permutationCnt, bestCost);
-
-            // shuffle order after the 1st try to diversify
-            if (permutationCnt > 1) Collections.shuffle(Arrays.asList(order), rnd);
-
-            int[] t    = new int[n];   Arrays.fill(t,    -1);
-            int[] lane = new int[n];   Arrays.fill(lane, -1);
-            int[] lastT   = new int[m]; Arrays.fill(lastT,   -1);
-            int[] lastTyp = new int[m];
-            boolean feasible = true;
-
-            //  greedy insertion for this permutation
-            for (int step = 0; step < n && feasible; step++) {
-                int id = order[step];
-                Plane p = P[id];
-
-                int pickLane = -1, pickTime = -1, pickCost = Integer.MAX_VALUE;
-
-                for (int l = 0; l < m; l++) {
-                    int earliest = (lastT[l] < 0) ? 0 :
-                            lastT[l] + instance.switchDelay[lastTyp[l]][p.type];
-                    for (int cand = earliest; cand <= p.deadline; cand++) {
-                        // check separation wrt same‑lane planes already scheduled
-                        boolean ok = true;
-                        for (int q = 0; q < n && ok; q++) if (t[q] != -1 && lane[q] == l) {
-                            int sep = instance.switchDelay[P[q].type][p.type];
-                            if (Math.abs(cand - t[q]) < sep) ok = false;
-                        }
-                        if (!ok) continue;
-                        int c = Math.abs(cand - p.wantedTime);
-                        if (c < pickCost) {
-                            pickCost = c; pickLane = l; pickTime = cand;
-                            break;             // earliest feasible time on this lane is cheapest
-                        }
-                    }
-                }
-                if (pickLane == -1) {
-                    feasible = false;
-                    log("  ✗  plane %d could not be placed (perm #%d step %d)", id, permutationCnt, step);
-                    break;                      // restart – this permutation failed
-                }
-
-                t[id]       = pickTime;
-                lane[id]    = pickLane;
-                lastT[pickLane]   = pickTime;
-                lastTyp[pickLane] = p.type;
-
-                if (VERBOSE && step % 50 == 0)
-                    log("    placed plane %-3d at t=%-4d on lane %d (partial)" , id, pickTime, pickLane);
-            }
-
-            if (!feasible) continue;             // try another permutation
-
-            /* full schedule built – compute global cost */
-            int curCost = scheduleCost(t, instance);
-            if (curCost < bestCost) {
-                bestCost = curCost;
-                bestT    = Arrays.copyOf(t,    n);
-                bestLane = Arrays.copyOf(lane, n);
-                log("  ✓  new incumbent cost=%d after %d permutations", bestCost, permutationCnt);
-
-                if (bestCost == 0) break;       // cannot do better
-            }
-
-            // 2) tiny random local search – try to swap lanes to reduce cost
-            long improveUntil = System.nanoTime() + 50_000_000L; // 50 ms tuning
-            int  lsIter = 0;
-            while (System.nanoTime() < improveUntil) {
-                lsIter++;
-                int a = rnd.nextInt(n), b = rnd.nextInt(n); if (a == b) continue;
-                int tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
-                if (respectsLaneSeparation(t, lane, instance)) {
-                    int newCost = scheduleCost(t, instance);
-                    if (newCost < curCost) {
-                        curCost = newCost; if (lsIter % LOG_EVERY == 0)
-                            log("    LS   improved to %d (iter=%d)", curCost, lsIter);
-                    } else { // rollback
-                        tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp;
-                    }
-                } else {
-                    tmp = lane[a]; lane[a] = lane[b]; lane[b] = tmp; // rollback infeasible
-                }
-            }
-        }
-
-        //  If greedy got nothing, fall back to complete enumeration
-        if (bestT == null && n <= 12) {          // 12 planes or fewer is safe
-            log("Greedy failed – switching to exhaustive search");
-            List<AircraftLandingSolution> sols = new AircraftLanding().findAll(instance);
-            return sols.isEmpty() ? null : sols.get(0);
-        }
-
-        AircraftLandingSolution sol = new AircraftLandingSolution(instance);
-        for (int i = 0; i < n; i++) sol.landPlane(i, bestLane[i], bestT[i]);
-        sol.compute();
-        log("Finished: cost=%d", sol.compute());
-        return sol;
+//        AircraftLandingSolution sol = new AircraftLandingSolution(instance);
+//        for (int i = 0; i < n; i++) sol.landPlane(i, bestLane[i], bestT[i]);
+//        sol.compute();
+//        log("Finished: cost=%d", sol.compute());
+//        return sol;
     }
     /* helper used by local tweaks */
     private static boolean isGloballyFeasible(int[] time, Plane[] planes, AircraftLandingInstance ins) {
@@ -194,6 +237,17 @@ public class AircraftLanding {
         IntVar[] time = IntStream.range(0, n)
                 .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
                 .toArray(IntVar[]::new);
+
+        // 0-1 absolute deviation for every plane            y_i = |time[i] – wanted|
+        IntVar[] absCost = new IntVar[n];
+        for (int i = 0; i < n; i++) {
+            absCost[i] = makeIntVar(cp, 0, P[i].deadline);          // upper bound is safe
+//            cp.post(new Absolute(sub(time[i], P[i].wantedTime), absCost[i]));
+            IntVar diff = plus(time[i], -P[i].wantedTime);   // diff = time[i] - wantedTime
+            cp.post(new Absolute(diff, absCost[i]));         // absCost[i] = |diff|
+        }
+        IntVar totalCost = sum(absCost);                // |t-wanted|
+        Objective obj    = cp.minimize(totalCost);      // we will give this to DFS
 
         // pairwise separation constraints
         for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
@@ -239,10 +293,10 @@ public class AircraftLanding {
 
         @Override public void post() {
             // Wake when lanes get bound or times get tighter
-//            li.propagateOnBoundChange(this);
-//            lj.propagateOnBoundChange(this);
-//            ti.propagateOnBoundChange(this);
-//            tj.propagateOnBoundChange(this);
+            li.propagateOnBoundChange(this);
+            lj.propagateOnBoundChange(this);
+            ti.propagateOnBoundChange(this);
+            tj.propagateOnBoundChange(this);
             propagate();
         }
 

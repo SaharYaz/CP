@@ -119,6 +119,21 @@ public class DisjunctiveBinary extends AbstractConstraint implements Comparable<
     }
 
     /**
+     * Returns the start variable of the first activity.
+     */
+    public IntVar start1() {
+        return start1;
+    }
+
+    /**
+     * Returns the start variable of the second activity.
+     */
+    public IntVar start2() {
+        return start2;
+    }
+
+
+    /**
      * A comparator by increasing slack value
      * @param o the object to be compared.
      * @return slack() - o.slack()

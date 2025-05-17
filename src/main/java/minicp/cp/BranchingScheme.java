@@ -183,6 +183,7 @@ public final class BranchingScheme {
     public static Supplier<Procedure[]> lastConflict(Supplier<IntVar> variableSelector, Function<IntVar, Integer> valueSelector) {
         final java.util.concurrent.atomic.AtomicReference<IntVar> last = new java.util.concurrent.atomic.AtomicReference<>(null);
 
+
         return new Supplier<Procedure[]>() {
 
             @Override
@@ -190,33 +191,32 @@ public final class BranchingScheme {
                 IntVar x = last.get();
                 if (x == null || x.isFixed()) {
                     x = variableSelector.get();
+                    if (x == null)
+                        return EMPTY; // no variable left -> solution reached
                 }
 
-                final IntVar var = x;   // captured effectively final
-                final int v = valueSelector.apply(var);
+                final IntVar var = x;               // variable to branch on
+                final int val = valueSelector.apply(var);
+                final Solver cp = var.getSolver();
 
                 // create the two decision alternatives with LC bookkeeping
-                Procedure left  = () -> doDecision(var, () -> var.getSolver().post(equal   (var, v)));
-                Procedure right = () -> doDecision(var, () -> var.getSolver().post(notEqual(var, v)));
+                Procedure left = () -> doDecision(cp, var, () -> cp.post(equal(var, val)));
+                Procedure right = () -> doDecision(cp, var, () -> cp.post(notEqual(var, val)));
 
                 return branch(left, right);
             }
 
-            // Posts the decision and updates lat accordingly
-            private void doDecision(IntVar var, Procedure post) throws InconsistencyException {
+            // Posts the decision and updates the last conflict variable
+            private void doDecision(Solver cp, IntVar var, Procedure post) throws InconsistencyException {
                 try {
-                    post.call();
-
-                    // Success
-                    if (var.isFixed()) {
-                        last.set(null);     // conflict resolved
-                    } else {
-                        last.set(var);      // not fixed yet
+                    post.call();           // the decision succeeds
+                    if (last.get() == var && var.isFixed()) {
+                        last.set(null);
                     }
+                    // else: keep the last-conflict variable
                 } catch (InconsistencyException f) {
-                    // Failure
-                    last.set(var);
-                    throw f;
+                    last.set(var);         // remember the culprit
+                    throw f;               // propagate the failure
                 }
             }
         };

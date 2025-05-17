@@ -42,6 +42,7 @@ public class JobShop extends OptimizationProblem {
     IntVar[][] end;
     IntVar[] endLast;
     IntVar makespan;
+    ArrayList<DisjunctiveBinary>[] disjunctiveBinaries;
 
     public JobShop(String instancePath) {
         instance = new JobShopInstance(instancePath);
@@ -74,7 +75,8 @@ public class JobShop extends OptimizationProblem {
         }
 
         // All disjunctive binary constraints (useful for custom search)
-        ArrayList<DisjunctiveBinary> disjunctiveBinaries = new ArrayList<>();
+        disjunctiveBinaries = new ArrayList[instance.nMachines];
+        for (int m = 0; m < instance.nMachines; m++) disjunctiveBinaries[m] = new ArrayList<>();
 
         for (int m = 0; m < instance.nMachines; m++) {
             // collect activities on machine m
@@ -91,16 +93,12 @@ public class JobShop extends OptimizationProblem {
 
             for (int i = 0; i < start_m.length; i++) {
                 for (int j = i + 1; j < start_m.length; j++) {
-                    // create the constraint
                     DisjunctiveBinary db = new DisjunctiveBinary(
                             start_m[i], dur_m[i],
                             start_m[j], dur_m[j]);
-
-                    // post it
                     cp.post(db);
-
                     //add it to the list used by the search
-                    disjunctiveBinaries.add(db);
+                    disjunctiveBinaries[m].add(db);
                 }
             }
         }
@@ -123,9 +121,65 @@ public class JobShop extends OptimizationProblem {
 
         // TODO 2: Replace the search by fixing the precedence relation of
         //  each binary constraint, then fix the makespan variable to its minimum value
-        Supplier<Procedure[]> fixMakespan = () -> makespan.isFixed() ? EMPTY : new Procedure[] {() -> cp.post(equal(makespan,makespan.min()))};
+//        Supplier<Procedure[]> fixMakespan = () -> makespan.isFixed() ? EMPTY : new Procedure[] {() -> cp.post(equal(makespan,makespan.min()))};
         //  HINT: use a and combinator makeDfs(cp, and(branchPrecedences, fixMakespan));
         //        where branchPrecedences is in charge of fixing the precedences
+
+        Supplier<Procedure[]> branchPrecedences = () -> {
+            int bestMachine = -1;
+            int bestScore = Integer.MAX_VALUE;
+
+            for (int m = 0; m < instance.nMachines; m++) {
+                int sum = 0;
+                boolean someUnfixed = false;
+                IntVar[] sOnM = instance.collect(start, m);
+                for (IntVar v : sOnM) sum += v.size();
+                for (DisjunctiveBinary db : disjunctiveBinaries[m])
+                    if (!db.isFixed()) { someUnfixed = true; break; }
+                if (someUnfixed && sum < bestScore) {
+                    bestScore = sum;
+                    bestMachine = m;
+                }
+            }
+
+            if (bestMachine == -1)
+                return EMPTY;
+
+            DisjunctiveBinary chosen = null;
+            int bestProd = Integer.MAX_VALUE;
+            for (DisjunctiveBinary db : disjunctiveBinaries[bestMachine]) {
+                if (!db.isFixed()) {
+                    int prod = db.start1().size() * db.start2().size();
+                    if (prod < bestProd) {
+                        bestProd = prod;
+                        chosen = db;
+                    }
+                }
+            }
+
+            if (chosen == null)
+                return EMPTY;
+
+            final DisjunctiveBinary selected = chosen;
+            int beforeSlack = selected.slackIfBefore();
+            int afterSlack = selected.slackIfAfter();
+
+            Procedure left;
+            Procedure right;
+            if (beforeSlack >= afterSlack) {
+                left = () -> cp.post(equal(selected.before(), 1));
+                right = () -> cp.post(equal(selected.before(), 0));
+            } else {
+                left = () -> cp.post(equal(selected.before(), 0));
+                right = () -> cp.post(equal(selected.before(), 1));
+            }
+
+            return branch(left, right);
+        };
+
+        Supplier<Procedure[]> fixMakespan = () -> makespan.isFixed() ? EMPTY : new Procedure[] {() -> cp.post(equal(makespan, makespan.min()))};
+
+        dfs = makeDfs(cp, and(branchPrecedences, fixMakespan));
 
     }
 

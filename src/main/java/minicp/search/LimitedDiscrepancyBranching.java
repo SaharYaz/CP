@@ -58,33 +58,34 @@ public class LimitedDiscrepancyBranching implements Supplier<Procedure[]> {
         // sets the curD depending on its position
         // curD = d + 0 for alts[0], ..., +i for alts[i]
 
-        Procedure[] original = bs.get();
-        if (original.length == 0)
-            return original;
+        Procedure[] branches = bs.get();
+        if (branches.length == 0)
+            return branches;
 
-        ArrayList<Procedure> kept = new ArrayList<>(original.length);
+        Procedure[] filtered = new Procedure[branches.length];
+        int n = 0;
 
-        for (int i = 0; i < original.length; i++) {
-            final int add = i;      // branch discrepancy
+        for (int i = 0; i < branches.length; i++) {
+            final int add = i; // discrepancy of this branch
 
             if (curD + add > maxD)  // would exceed limit
                 continue;
 
-            final Procedure alt = original[i];
+            final Procedure alt = branches[i];
 
-            kept.add(() -> {
-                curD += add;        // push discrepancy
+            filtered[n++] = () -> {
+                curD += add;     // push discrepancy
                 try {
                     alt.call();     // explore subtree
                 } finally {
                     curD -= add;    // pop on back-track
                 }
-            });
+            };
         }
-
-        return kept.isEmpty()
-                ? BranchingScheme.EMPTY
-                : kept.toArray(new Procedure[0]);
-
+        if (n == 0) return BranchingScheme.EMPTY;
+        if (n == branches.length) return filtered;
+        Procedure[] result = new Procedure[n];
+        System.arraycopy(filtered, 0, result, 0, n);
+        return result;
     }
 }
