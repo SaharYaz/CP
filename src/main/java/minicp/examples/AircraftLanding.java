@@ -52,116 +52,50 @@ public class AircraftLanding {
     public static AircraftLandingSolution solve(AircraftLandingInstance instance) {
         log("====  solve() called  | planes=%d lanes=%d  ====", instance.nPlanes, instance.nLanes);
 
-        int n = instance.nPlanes, m = instance.nLanes;
+        int n = instance.nPlanes;
+        int m = instance.nLanes;
         Plane[] P = instance.planes;
-
-        // simple greedy heuristic to get a feasible solution quickly
-        Integer[] order = IntStream.range(0, n).boxed()
-                .sorted(Comparator.comparingInt(i -> P[i].wantedTime))
-                .toArray(Integer[]::new);
-
-        int[] laneGreedy = new int[n];
-        int[] timeGreedy = new int[n];
-        Arrays.fill(laneGreedy, -1);
-        Arrays.fill(timeGreedy, -1);
-
-        int[] lastTime = new int[m];
-        int[] lastType = new int[m];
-        Arrays.fill(lastTime, -1);
-
-        boolean greedyFeasible = true;
-        for (int pid : order) {
-            Plane p = P[pid];
-            int bestLane = -1;
-            int bestTime = -1;
-            int bestCost = Integer.MAX_VALUE;
-
-            for (int l = 0; l < m; l++) {
-                int earliest = (lastTime[l] < 0) ? 0
-                        : lastTime[l] + instance.switchDelay[lastType[l]][p.type];
-                for (int cand = earliest; cand <= p.deadline; cand++) {
-                    boolean ok = true;
-                    for (int q = 0; q < n && ok; q++) if (laneGreedy[q] == l && timeGreedy[q] != -1) {
-                        int sep = instance.switchDelay[P[q].type][p.type];
-                        if (Math.abs(cand - timeGreedy[q]) < sep) ok = false;
-                    }
-                    if (!ok) continue;
-                    int c = Math.abs(cand - p.wantedTime);
-                    if (c < bestCost) {
-                        bestCost = c;
-                        bestLane = l;
-                        bestTime = cand;
-                        break;
-                    }
-                }
-            }
-
-            if (bestLane == -1) {
-                greedyFeasible = false;
-                break;
-            }
-
-            laneGreedy[pid] = bestLane;
-            timeGreedy[pid] = bestTime;
-            lastTime[bestLane] = bestTime;
-            lastType[bestLane] = p.type;
-        }
-
-        if (greedyFeasible) {
-            AircraftLandingSolution sol = new AircraftLandingSolution(instance);
-            for (int i = 0; i < n; i++) {
-                sol.landPlane(i, laneGreedy[i], timeGreedy[i]);
-            }
-            return sol;
-        }
-
-
 
         Solver cp = makeSolver();
 
+        IntVar[] time = makeIntVarArray(n, i -> makeIntVar(cp, 0, P[i].deadline));
         IntVar[] lane = makeIntVarArray(cp, n, m);
-        IntVar[] time = IntStream.range(0, n)
-                .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
-                .toArray(IntVar[]::new);
 
-        IntVar[] absCost = new IntVar[n];
+        IntVar[] cost = new IntVar[n];
         for (int i = 0; i < n; i++) {
-            IntVar diff = plus(time[i], -P[i].wantedTime);
-            absCost[i] = makeIntVar(cp, 0, P[i].deadline);
-            cp.post(new Absolute(diff, absCost[i]));
-        }
-        IntVar totalCost = sum(absCost);
-        Objective obj = cp.minimize(totalCost);
-
-
-        for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
-            int sepIJ = instance.switchDelay[P[i].type][P[j].type];
-            int sepJI = instance.switchDelay[P[j].type][P[i].type];
-            cp.post(new Separation(lane[i], lane[j], time[i], time[j], sepIJ, sepJI));
+            cost[i] = makeIntVar(cp, 0, P[i].deadline);
+            cp.post(new Absolute(minus(time[i], P[i].wantedTime), cost[i]));
         }
 
-        IntVar[] all = new IntVar[2 * n];
-        System.arraycopy(time, 0, all, 0, n);
-        System.arraycopy(lane, 0, all, n, n);
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++) {
+                int sepIJ = instance.switchDelay[P[i].type][P[j].type];
+                int sepJI = instance.switchDelay[P[j].type][P[i].type];
+                cp.post(new Separation(lane[i], lane[j], time[i], time[j], sepIJ, sepJI));
+            }
 
-        Supplier<Procedure[]> branching = lastConflict(
-                () -> selectMin(all, v -> v.size() > 1, IntVar::size),
-                IntVar::min
+        Objective obj = cp.minimize(sum(cost));
+
+        DFSearch dfs = makeDfs(cp,
+                and(firstFail(time), firstFail(lane))
         );
 
-
-        DFSearch dfs = makeDfs(cp, branching);
-
-        AircraftLandingSolution[] best = new AircraftLandingSolution[1];
+        final int[] bestT = new int[n];
+        final int[] bestR = new int[n];
         dfs.onSolution(() -> {
-            AircraftLandingSolution s = new AircraftLandingSolution(instance);
-            for (int i = 0; i < n; i++)
-                s.landPlane(i, lane[i].min(), time[i].min());
-            best[0] = s;
+            for (int i = 0; i < n; i++) {
+                bestT[i] = time[i].min();
+                bestR[i] = lane[i].min();
+            }
         });
-        long deadline = cpuNow() + CPU_LIMIT;
-        dfs.optimize(obj, stats -> cpuNow() >= deadline);
-        return best[0];
+
+        dfs.optimize(obj);
+
+        AircraftLandingSolution sol = new AircraftLandingSolution(instance);
+        for (int i = 0; i < n; i++) {
+            sol.landPlane(i, bestR[i], bestT[i]);
+        }
+        return sol;
     }
     /* helper used by local tweaks */
     private static boolean isGloballyFeasible(int[] time, Plane[] planes, AircraftLandingInstance ins) {
