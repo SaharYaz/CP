@@ -86,6 +86,10 @@ public class Disjunctive extends AbstractConstraint {
     @Override
     public void post() {
 
+        for (int i = 0; i < start.length; i++) {
+            start[i].propagateOnBoundChange(this);
+        }
+
         int[] demands = new int[start.length];
         for (int i = 0; i < start.length; i++) {
             demands[i] = 1;
@@ -187,8 +191,31 @@ public class Disjunctive extends AbstractConstraint {
      * @return true if one domain was changed by the not-last algo
      */
     public boolean notLast() {
-        IntVar[] mirror = Factory.makeIntVarArray(start.length, i -> minus(end[i]));
-        Disjunctive mirrorDisjunctive = new Disjunctive(mirror, duration, false);
-        return mirrorDisjunctive.detectablePrecedence();
+        update();
+        Arrays.sort(permEst, Comparator.comparingInt(i -> start[i].min()));
+        Arrays.sort(permLct, Comparator.comparingInt(i -> end[i].max()));
+
+        thetaTree.reset();
+        int k = start.length - 1;
+        boolean changed = false;
+
+        for (int idx = start.length - 1; idx >= 0; idx--) {
+            int j = permEst[idx];
+
+            while (k >= 0 && end[permLct[k]].max() > startMin[j]) {
+                int a = permLct[k];
+                thetaTree.insert(rankEst[a], endMax[a] - duration[a], duration[a]);
+                k--;
+            }
+
+            thetaTree.remove(rankEst[j]);
+            if (thetaTree.getECT() > endMax[j] - duration[j]) {
+                end[j].removeAbove(thetaTree.getECT());
+                changed = true;
+            }
+            thetaTree.insert(rankEst[j], endMax[j] - duration[j], duration[j]);
+        }
+
+        return changed;
     }
 }

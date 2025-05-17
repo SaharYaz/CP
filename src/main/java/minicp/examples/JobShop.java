@@ -160,18 +160,18 @@ public class JobShop extends OptimizationProblem {
             if (chosen == null)
                 return EMPTY;
 
-            final DisjunctiveBinary choice = chosen;
-            final int beforeSlack = choice.slackIfBefore();
-            final int afterSlack = choice.slackIfAfter();
+            final DisjunctiveBinary finalChosen = chosen;
+            int beforeSlack = finalChosen.slackIfBefore();
+            int afterSlack = finalChosen.slackIfAfter();
 
             Procedure left;
             Procedure right;
             if (beforeSlack >= afterSlack) {
-                left = () -> cp.post(equal(choice.before(), 1));
-                right = () -> cp.post(equal(choice.before(), 0));
+                left = () -> cp.post(equal(finalChosen.before(), 1));
+                right = () -> cp.post(equal(finalChosen.before(), 0));
             } else {
-                left = () -> cp.post(equal(choice.before(), 0));
-                right = () -> cp.post(equal(choice.before(), 1));
+                left = () -> cp.post(equal(finalChosen.before(), 0));
+                right = () -> cp.post(equal(finalChosen.before(), 1));
             }
 
             return branch(left, right);
