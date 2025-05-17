@@ -49,7 +49,6 @@ public class Absolute extends AbstractConstraint {
     }
 
     public void post() {
-        // TODO
         x.propagateOnDomainChange(this);
         y.propagateOnDomainChange(this);
         propagate();
@@ -58,7 +57,6 @@ public class Absolute extends AbstractConstraint {
     @Override
     public void propagate() {
         // y = |x|
-        // TODO
         bufX = ensureCapacity(bufX, x.size());
         bufY = ensureCapacity(bufY, y.size());
 
