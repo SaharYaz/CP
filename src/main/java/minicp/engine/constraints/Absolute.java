@@ -29,6 +29,13 @@ public class Absolute extends AbstractConstraint {
     private final IntVar x;
     private final IntVar y;
 
+    private int[] bufX = new int[0];
+    private int[] bufY = new int[0];
+
+    private static int[] ensureCapacity(int[] a, int needed) {
+        return (a.length >= needed) ? a : new int[needed];
+    }
+
     /**
      * Creates the absolute value constraint {@code y = |x|}.
      *
@@ -43,33 +50,48 @@ public class Absolute extends AbstractConstraint {
 
     public void post() {
         // TODO
+        x.propagateOnDomainChange(this);
+        y.propagateOnDomainChange(this);
         propagate();
-        x.whenDomainChange(this::propagate);
-        y.whenDomainChange(this::propagate);
     }
 
     @Override
     public void propagate() {
         // y = |x|
         // TODO
-        int minAbs = Math.min(Math.abs(x.min()), Math.abs(x.max()));
-        int maxAbs = Math.max(Math.abs(x.min()), Math.abs(x.max()));
-        y.removeBelow(minAbs);
-        y.removeAbove(maxAbs);
+        bufX = ensureCapacity(bufX, x.size());
+        bufY = ensureCapacity(bufY, y.size());
 
-        // 2. bound x with respect to current
-        int yMin = y.min();
-        int yMax = y.max();
-        x.removeBelow(-yMax);
-        x.removeAbove(yMax);
-        while (x.min() < -yMax || (x.min() > -yMin && x.min() < yMin)) {
-            x.remove(x.min());
+        int xSize = x.fillArray(bufX);
+        int ySize = y.fillArray(bufY);
+
+        // 1. prune values of y that have no support in x or are negative
+        for (int i = 0; i < ySize; i++) {
+            int v = bufY[i];
+            if (v < 0) {
+                y.remove(v);
+            } else {
+                boolean supported = false;
+                for (int j = 0; j < xSize && !supported; j++)
+                    supported = Math.abs(bufX[j]) == v;
+                if (!supported) y.remove(v);
+            }
         }
-        while (x.max() > yMax || (x.max() < yMin && x.max() > -yMin)) {
-            x.remove(x.max());
+
+
+        y.fillArray(bufY); // refresh y domain
+
+        // 2. prune values of x that have no support in y
+        for (int j = 0; j < xSize; j++) {
+            int xv = bufX[j];
+            if (!y.contains(Math.abs(xv))) x.remove(xv);
         }
         setActive(!x.isFixed() || !y.isFixed());
+
+        if (x.isFixed() && y.isFixed())
+            setActive(false);
     }
 }
+
 
 

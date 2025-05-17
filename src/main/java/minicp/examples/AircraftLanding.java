@@ -18,7 +18,8 @@ import minicp.search.SearchStatistics;
 import minicp.util.exception.InconsistencyException;
 import minicp.util.io.InputReader;
 import java.util.*;
-
+import minicp.engine.constraints.Absolute;
+import minicp.search.Objective;
 
 public class AircraftLanding {
     /* ‑‑ configuration flags ‑‑ */
@@ -194,6 +195,17 @@ public class AircraftLanding {
         IntVar[] time = IntStream.range(0, n)
                 .mapToObj(i -> makeIntVar(cp, 0, P[i].deadline))
                 .toArray(IntVar[]::new);
+
+        // 0-1 absolute deviation for every plane            y_i = |time[i] – wanted|
+        IntVar[] absCost = new IntVar[n];
+        for (int i = 0; i < n; i++) {
+            absCost[i] = makeIntVar(cp, 0, P[i].deadline);          // upper bound is safe
+//            cp.post(new Absolute(sub(time[i], P[i].wantedTime), absCost[i]));
+            IntVar diff = plus(time[i], -P[i].wantedTime);   // diff = time[i] - wantedTime
+            cp.post(new Absolute(diff, absCost[i]));         // absCost[i] = |diff|
+        }
+        IntVar totalCost = sum(absCost);                // |t-wanted|
+        Objective obj    = cp.minimize(totalCost);      // we will give this to DFS
 
         // pairwise separation constraints
         for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) {
