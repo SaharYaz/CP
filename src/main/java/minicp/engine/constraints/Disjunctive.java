@@ -172,7 +172,9 @@ public class Disjunctive extends AbstractConstraint {
 
             while (k < start.length && startMin[permEst[k]] + duration[permEst[k]] <= end[j].max()) {
                 int a = permEst[k];
-                thetaTree.insert(rankEst[a], startMin[a] + duration[a], duration[a]);
+                if (a != j) {
+                    thetaTree.insert(rankEst[a], startMin[a] + duration[a], duration[a]);
+                }
                 k++;
             }
 
@@ -206,7 +208,9 @@ public class Disjunctive extends AbstractConstraint {
 
             while (k >= 0 && end[permLct[k]].max() > startMin[j]) {
                 int a = permLct[k];
-                thetaTree.insert(rankEst[a], endMax[a] - duration[a], duration[a]);
+                if (a != j) {
+                    thetaTree.insert(rankEst[a], endMax[a] - duration[a], duration[a]);
+                }
                 k--;
             }
 
